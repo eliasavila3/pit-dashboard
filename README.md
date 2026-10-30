@@ -20,7 +20,7 @@ Madtown Robotics (FRC 1323) pit dashboard: one static page (`index.html`) backed
    ```
 5. In `config.js`, set `supabaseUrl` and `supabaseAnonKey` (Project settings > API). Then host both files over HTTPS. The camera needs HTTPS.
 
-People sign in from **Settings > Board sign-in** with an emailed link. Anyone can request a link, but only emails in `pit_members` can see or change the board. Without signing in, the page saves to that browser only.
+When no one is signed in, the page shows a sign-in screen that emails a link. Anyone can request a link, but only emails in `pit_members` can see or change the board. If Supabase can't be reached, the page says so and keeps retrying instead of saving to the browser. Sign out from **Settings > Board sign-in**. Only with no Supabase project in `config.js` does the page save to that browser only.
 
 ## Notes
 

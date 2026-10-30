@@ -150,7 +150,7 @@ main{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px
 .field{display:grid;gap:6px}
 .field > span{font-weight:600;font-size:15px;color:var(--ink-2)}
 .field small{color:var(--ink-3);font-size:14px}
-input[type=text],input[type=number],input[type=search],input[type=date],input[type=datetime-local],select,textarea{
+input[type=text],input[type=email],input[type=number],input[type=search],input[type=date],input[type=datetime-local],select,textarea{
   width:100%;min-height:52px;padding:10px 14px;border-radius:var(--r);border:1px solid var(--line);background:var(--surface);font-size:17px}
 textarea{min-height:110px;resize:vertical;line-height:1.4}
 .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
@@ -610,6 +610,14 @@ main:has(.invmaps){max-width:none}
 .sheet-foot{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;padding:12px max(20px,env(safe-area-inset-right,0px)) calc(12px + env(safe-area-inset-bottom,0px)) max(20px,env(safe-area-inset-left,0px));border-top:1px solid var(--line)}
 .sheet-foot .btn{flex:1 1 140px}
 .sheet-foot .btn.left{flex:0 1 auto;margin-right:auto}
+/* Sign-in / connection screen: covers the board until it is signed in and connected */
+.gate{position:fixed;inset:0;z-index:65;background:var(--bg);overflow:auto;display:flex;align-items:center;justify-content:center;padding:max(16px,env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) max(16px,env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+.gate-card{width:100%;max-width:460px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:24px;display:grid;gap:16px}
+.gate-card .wordmark{height:44px;background:var(--brand-ink)}
+.gate-card h1{font-size:28px}
+.gate-card p{color:var(--ink-2)}
+.gate-card .row{display:flex;flex-wrap:wrap;gap:10px}
+.gate-card .row .btn{flex:1 1 180px}
 #toast{position:fixed;z-index:70;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom,0px));display:grid;gap:8px;width:min(520px,calc(100vw - 32px))}
 @media (min-width:900px){ #toast{bottom:24px} }
 .toast{padding:14px 18px;border-radius:12px;background:var(--ink);color:var(--surface);font-weight:600;box-shadow:0 8px 30px rgba(0,0,0,.25)}
@@ -743,9 +751,10 @@ main:has(.invmaps){max-width:none}
 <nav class="nav" id="nav" aria-label="Sections"></nav>
 <div id="sheet-root" hidden></div>
 <div id="toast" aria-live="polite"></div>
+<div id="gate" class="gate" role="dialog" aria-modal="true" aria-labelledby="gate-h" hidden></div>
 
 <script src="config.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.js"></script>
 <script>
 (function(){
 "use strict";
@@ -828,32 +837,57 @@ const S = {}; COLS.forEach(c=>S[c]={});
 const me = { id:null, email:"", access:null, names:{}, readOnly:false };
 let userCap=null, sampleCap=null, imgLimits=null, sampleChecked=false;
 const Q = {};
-const sb = (window.supabase && /^https:\/\//.test(SUPABASE_URL) && !SUPABASE_URL.includes("YOUR-PROJECT")) ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+/* config.js names a Supabase project: the board then always runs live and shows the sign-in screen when no one is signed in */
+const sbConfigured = /^https:\/\//.test(SUPABASE_URL) && !SUPABASE_URL.includes("YOUR-PROJECT") && !!SUPABASE_ANON_KEY && !SUPABASE_ANON_KEY.includes("YOUR-");
+const sb = (sbConfigured && window.supabase) ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+let authLinkErr = "";   /* set at boot when a sign-in link comes back with an error */
 
 const Store = {
-  mode:"connecting", db:null, ready:null, loaded:{}, buf:{}, ts:{},
+  mode:"connecting", db:null, ready:null, loaded:{}, buf:{}, ts:{}, offline:false,
   start(){
     this.ready = (async ()=>{
-      let session=null;
-      try{ if(sb){ const r=await sb.auth.getSession(); session=r.data&&r.data.session; } }catch(e){ console.warn("auth",e); }
-      if(session){
-        me.id=session.user.id; me.email=session.user.email||"";
-        /* links this sign-in to its pit_members row and returns editor / viewer, or null when the email isn't on the board */
-        let role;
-        for(let i=0;;i++){ const r=await sb.rpc("pit_claim"); if(!r.error){ role=r.data||null; break; } console.warn("pit_claim",r.error); await sleep(Math.min(15000,1500*(i+1))); }
-        me.access=role?"member":"none";
-        if(role){ this.db=sb; this.mode="live"; me.readOnly= role!=="editor"; }
-        else this.mode="local";
-      } else this.mode="local";
-      if(this.mode==="live") this.subscribe(); else COLS.forEach(c=>this.listen(c));
-      paintSync();
+      if(!sb){
+        if(sbConfigured){ showGate("unreachable",{detail:"The sign-in library didn't load from cdn.jsdelivr.net."}); for(;;){ await gateWait(0); location.reload(); } }
+        /* no Supabase project in config.js: keep everything on this device */
+        this.mode="local"; COLS.forEach(c=>this.listen(c)); paintSync(); return;
+      }
+      showGate("connecting");
+      for(;;){ const st=await this.connect(); if(st==="live") break; await gateWait(st==="unreachable"?10000:0); }
+      hideGate(); this.subscribe(); paintSync();
     })();
+  },
+  /* One attempt to get on the board. Returns "live", or the screen it is showing: signin / unreachable / noaccess / setup */
+  async connect(){
+    if(!(await pingSupabase())){ showGate("unreachable"); return "unreachable"; }
+    let session=null;
+    try{ const r=await sb.auth.getSession(); if(r.error) throw r.error; session=r.data&&r.data.session; }
+    catch(e){ if(mapErr(e).code==="unavailable"){ showGate("unreachable"); return "unreachable"; } }
+    if(!session){ showGate("signin"); return "signin"; }
+    me.id=session.user.id; me.email=session.user.email||"";
+    /* links this sign-in to its pit_members row and returns editor / viewer, or null when the email isn't on the board */
+    const r=await sb.rpc("pit_claim");
+    if(r.error){
+      const m=mapErr(r.error);
+      if(m.code==="unavailable"){ showGate("unreachable"); return "unreachable"; }
+      if(m.code==="revoked"){ showGate("signin"); try{ await sb.auth.signOut({scope:"local"}); }catch(e){} return "signin"; }
+      showGate("setup",{detail:r.error.message||String(r.error.code||"")}); return "setup";
+    }
+    if(!r.data){ me.access="none"; showGate("noaccess"); return "noaccess"; }
+    me.access="member"; me.readOnly= r.data!=="editor"; this.db=sb; this.mode="live";
+    return "live";
+  },
+  /* lost / regained the connection while on the board */
+  setOffline(v){
+    if(this.offline===v || this.mode!=="live") return;
+    this.offline=v; paintSync();
+    if(v) toast("Can't reach the board's server. Changes stay on this page and save when it's back. Don't reload until then.","bad");
+    else toast("Connected again. Changes are saving.");
   },
   subscribe(){
     const ch=sb.channel("pit-board");
     COLS.forEach(col=>ch.on("postgres_changes",{event:"*",schema:"public",table:col},p=>this.change(col,p)));
     /* (re)load every table each time the channel (re)joins, so nothing missed while offline is lost */
-    ch.subscribe(status=>{ if(status==="SUBSCRIBED") COLS.forEach(c=>this.load(c)); else if(status==="CHANNEL_ERROR"||status==="TIMED_OUT") COLS.forEach(c=>{ this.loaded[c]=false; }); });
+    ch.subscribe(status=>{ if(status==="SUBSCRIBED"){ this.setOffline(false); COLS.forEach(c=>this.load(c)); } else if(status==="CHANNEL_ERROR"||status==="TIMED_OUT"){ COLS.forEach(c=>{ this.loaded[c]=false; }); this.setOffline(true); } });
   },
   async load(col){
     this.loaded[col]=false; this.buf[col]=[];
@@ -865,7 +899,7 @@ const Store = {
         data.forEach(r=>{ m[r.id]=Object.assign(clone(r.data||{}),{id:r.id}); ts[r.id]=r.updated_at; });
         if(data.length<1000) break;
       }
-    }catch(e){ handleErr(e); setTimeout(()=>this.load(col),3000); return; }
+    }catch(e){ if(e&&e.code==="unavailable") this.setOffline(true); else handleErr(e); setTimeout(()=>this.load(col),3000); return; }
     S[col]=m; this.ts[col]=ts; this.loaded[col]=true;
     const b=this.buf[col]; this.buf[col]=[]; b.forEach(p=>this.apply(col,p));
     reapply(col); onData(col);
@@ -898,6 +932,83 @@ const Store = {
     }
   }
 };
+/* Is the Supabase project answering? Any HTTP reply counts; only a network failure or timeout doesn't. */
+async function pingSupabase(){
+  const ctl=new AbortController(), t=setTimeout(()=>ctl.abort(),8000);
+  try{ await fetch(SUPABASE_URL+"/auth/v1/health",{headers:{apikey:SUPABASE_ANON_KEY},signal:ctl.signal,cache:"no-store"}); return true; }
+  catch(e){ return false; }
+  finally{ clearTimeout(t); }
+}
+
+/* ---- sign-in / connection screen ---- */
+const gate = { state:null, email:"", wake:null, busy:false };
+function showGate(state,o){
+  o=o||{}; gate.state=state; gate.detail=o.detail||"";
+  const el=$("#gate"); if(!el) return;
+  el.hidden=false; document.body.classList.add("locked");
+  const card=(h,body)=>`<div class="gate-card"><span class="wordmark" role="img" aria-label="Madtown Robotics 1323"></span><h1 id="gate-h">${h}</h1>${body}</div>`;
+  const retry=`<button class="btn primary wide" data-g="retry">Try again</button>`;
+  if(state==="connecting") el.innerHTML=card("Pit board",`<div class="thinking"><span class="spin"></span><span>Connecting to the board…</span></div>`);
+  else if(state==="signin") el.innerHTML=card("Sign in to the pit board",`
+    <p>Enter your email and you'll get a sign-in link. Only emails added to the board can open it.</p>
+    ${authLinkErr?`<div class="notice bad">That sign-in link didn't work (${esc(authLinkErr)}). Send a new one.</div>`:""}
+    <label class="field"><span>Email</span><input type="email" id="g-email" autocomplete="email" inputmode="email" placeholder="you@example.com" value="${esc(gate.email)}"></label>
+    <div id="g-msg"></div>
+    <button class="btn primary wide" data-g="send">Email me a sign-in link</button>`);
+  else if(state==="sent") el.innerHTML=card("Check your email",`
+    <p>A sign-in link is on its way to <b>${esc(gate.email)}</b>. Open it on this device to get onto the board. It can take a minute to arrive.</p>
+    <div id="g-msg"></div>
+    <div class="row"><button class="btn" data-g="send">Send the link again</button><button class="btn" data-g="other">Use a different email</button></div>`);
+  else if(state==="unreachable") el.innerHTML=card("Can't reach the board",`
+    <div class="notice bad">The board's server (Supabase) isn't answering, so nothing can load or save right now.</div>
+    <p>${gate.detail?esc(gate.detail)+" ":""}Check that this device is on the pit Wi-Fi or a hotspot. This screen tries again every few seconds.</p>
+    ${retry}`);
+  else if(state==="noaccess") el.innerHTML=card("This email isn't on the board",`
+    <p><b>${esc(me.email)}</b> is signed in, but it hasn't been added to this board yet. Ask the board owner to add it, then tap Try again.</p>
+    <div class="row"><button class="btn primary" data-g="retry">Try again</button><button class="btn" data-g="signout">Sign out</button></div>`);
+  else if(state==="setup") el.innerHTML=card("The board isn't set up yet",`
+    <div class="notice bad">Supabase answered, but the board's database isn't ready${gate.detail?`: ${esc(gate.detail)}`:""}.</div>
+    <p>The board owner needs to run <b>supabase/schema.sql</b> in the Supabase SQL editor.</p>
+    <div class="row"><button class="btn primary" data-g="retry">Try again</button><button class="btn" data-g="signout">Sign out</button></div>`);
+  const f=el.querySelector("#g-email"); if(f) setTimeout(()=>f.focus(),0);
+}
+function hideGate(){ gate.state=null; const el=$("#gate"); if(el){ el.hidden=true; el.innerHTML=""; } document.body.classList.remove("locked"); }
+/* resolves on Try again, on sign-in, or after ms (0 = no timeout) */
+function gateWait(ms){ return new Promise(res=>{ gate.wake=res; if(ms) setTimeout(res,ms); }); }
+function gateKick(){ const w=gate.wake; gate.wake=null; if(w) w(); }
+function gateMsg(text){ const m=$("#g-msg"); if(m) m.innerHTML=text?`<div class="notice bad">${esc(text)}</div>`:""; }
+async function gateSend(){
+  if(gate.busy) return;
+  const inp=$("#g-email"); if(inp) gate.email=inp.value.trim().toLowerCase();
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(gate.email)){ gateMsg("Enter your email address."); return; }
+  gate.busy=true; $$("#gate [data-g]").forEach(b=>b.disabled=true);
+  let error=null;
+  try{ ({error}=await sb.auth.signInWithOtp({email:gate.email, options:{emailRedirectTo:location.origin+location.pathname}})); }catch(e){ error=e; }
+  gate.busy=false; $$("#gate [data-g]").forEach(b=>b.disabled=false);
+  if(!error){ authLinkErr=""; showGate("sent"); return; }
+  const st=Number(error.status)||0;
+  gateMsg(mapErr(error).code==="unavailable" ? "Can't reach the board's server to send the email. Check the Wi-Fi or hotspot, then try again."
+    : st===429 ? "Too many sign-in emails. Wait a minute, then try again."
+    : "Couldn't send the sign-in email ("+(error.message||"error")+"). Check the address and try again.");
+}
+document.addEventListener("click", e=>{
+  const b=e.target.closest("#gate [data-g]"); if(!b || b.disabled) return;
+  const g=b.dataset.g;
+  if(g==="send") gateSend();
+  else if(g==="other"){ showGate("signin"); }
+  else if(g==="retry"){ showGate("connecting"); gateKick(); }
+  else if(g==="signout"){ b.disabled=true; sb.auth.signOut().catch(()=>{}).then(()=>location.reload()); }
+});
+document.addEventListener("keydown", e=>{ if(e.key==="Enter" && e.target && e.target.id==="g-email"){ e.preventDefault(); gateSend(); } });
+/* a link opened in another tab signs this one in too */
+document.addEventListener("visibilitychange", async ()=>{
+  if(document.visibilityState!=="visible" || !sb || !gate.state) return;
+  if(gate.state==="signin"||gate.state==="sent"){ try{ const r=await sb.auth.getSession(); if(r.data&&r.data.session){ showGate("connecting"); gateKick(); } }catch(e){} }
+  else if(gate.state==="unreachable") gateKick();
+});
+window.addEventListener("online", ()=>{ if(gate.state==="unreachable") gateKick(); });
+window.addEventListener("offline", ()=>Store.setOffline(true));
+
 /* Supabase / PostgREST errors in the codes handleErr() already knows */
 function mapErr(e){
   const c=String(e&&e.code||""), st=Number(e&&(e.status||e.statusCode))||0, msg=String(e&&e.message||"");
@@ -935,7 +1046,8 @@ async function drain(q){
   try{ await Store.ready; }catch(e){}
   while(q.ops.length){
     const op=q.ops[0]; op.started=true;
-    try{ await Store.raw(q.col,q.id,op); }catch(e){ handleErr(e,true); }
+    try{ await Store.raw(q.col,q.id,op); Store.setOffline(false); }
+    catch(e){ if(e && e.code==="unavailable" && Store.mode==="live"){ Store.setOffline(true); await sleep(4000); continue; } handleErr(e,true); }
     q.ops.shift();
   }
   q.running=false;
@@ -1046,8 +1158,8 @@ function render(){ paintHeader(); paintNav(); paintSync(); const v=VIEWS[ui.view
 
 function paintSync(){
   const el=$("#h-sync"); if(!el) return;
-  el.className="sync "+(Store.mode==="live"?"live":Store.mode==="local"?"local":"");
-  el.querySelector("span").textContent = Store.mode==="live" ? (me.readOnly?"Live · view only":"Live") : Store.mode==="local" ? "This device only" : "Connecting";
+  el.className="sync "+(Store.mode==="live"?(Store.offline?"local":"live"):Store.mode==="local"?"local":"");
+  el.querySelector("span").textContent = Store.mode==="live" ? (Store.offline?"Can't reach server":me.readOnly?"Live · view only":"Live") : Store.mode==="local" ? "This device only" : "Connecting";
 }
 function paintHeader(){
   const s=settings();
@@ -4180,18 +4292,18 @@ document.addEventListener("keydown", e=>{
   if(ui.ed && t.dataset && t.dataset.ed==="text" && e.key==="Enter"){ e.preventDefault(); const {si}=edLoc(t); const sid=ui.ed.draft.sections[si].id; const f=$("#add-"+sid); if(f) f.focus(); }
 });
 document.addEventListener("toggle", e=>{ const d=e.target; if(d && d.dataset && d.dataset.sid){ if(d.open) ui.openSecs.add(d.dataset.sid); else ui.openSecs.delete(d.dataset.sid); } }, true);
-window.addEventListener("beforeunload", e=>{ if(ui.ed && ui.ed.dirty){ e.preventDefault(); e.returnValue=""; } });
+window.addEventListener("beforeunload", e=>{ if((ui.ed && ui.ed.dirty) || Object.values(Q).some(q=>q.ops.length)){ e.preventDefault(); e.returnValue=""; } });
 
 /* =========================================================
    Boot
    ========================================================= */
 (async function boot(){
   const h=(location.hash||"").slice(1);
-  if(/(^|&)error_description=/.test(h)){ const d=new URLSearchParams(h).get("error_description"); setTimeout(()=>toast("Sign-in link didn't work: "+(d||"try again")+". Send a new one from Settings.","bad"),300); history.replaceState(null,"",location.pathname+location.search); }
+  if(/(^|&)error_description=/.test(h)){ const d=new URLSearchParams(h).get("error_description"); authLinkErr=d||"expired or already used"; history.replaceState(null,"",location.pathname+location.search); }
   if(/^b-[a-z0-9]+$/i.test(h)){ ui.pendingBat=h.slice(2); go("batteries",true); } else go(VIEWS[h]?h:PREF.get("view","home"),true);
   setInterval(tick,1000);
   Store.start();
-  if(sb) sb.auth.onAuthStateChange(ev=>{ if(ev==="SIGNED_OUT") location.reload(); });
+  if(sb) sb.auth.onAuthStateChange(ev=>{ if(ev==="SIGNED_OUT" && Store.mode==="live") location.reload(); else if(ev==="SIGNED_IN" && gate.state){ showGate("connecting"); gateKick(); } });
   Store.ready.then(()=>{
     if(Store.mode!=="live") return;
     const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
