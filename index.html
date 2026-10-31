@@ -2280,7 +2280,7 @@ function buildPdf(cl,N,matchLabel,assign,measure){
         doc.setFont("helvetica","bold"); doc.setFontSize(Math.max(6.5,9*k)); doc.setTextColor(70); doc.text(clean(it.text).toUpperCase(),M+4,y+11*k); y+=18*k; doc.setTextColor(0); return;
       }
       const g=geo(it,k), L=layout(it.text,g.maxW,SZ), h=Math.max(26*k,L.lines.length*LH+11*k), by=y+Math.max(0,(Math.min(h,26*k)-B)/2);
-      if(measure) measure[it.id]={p:String(s.sNo), x:g.bx+B/2, y:by+B/2, top:y, h};
+      if(measure) measure[it.id]={p:String(s.sNo), x:g.bx+B/2, y:by+B/2, s:B, top:y, h};
       doc.setDrawColor(0); doc.setLineWidth(1.1); doc.rect(g.bx,by,B,B);
       doc.setFont("helvetica","bold"); doc.setFontSize(Math.max(7,9*k)); doc.setTextColor(60); doc.text(r.no,g.nx,by+B*0.78);
       doc.setTextColor(0); doc.setFontSize(SZ); drawLines(L,g.tx,by+B*0.78,LH);
@@ -2338,6 +2338,19 @@ async function readImage(prompt,o){
   if(!r.ok) throw {code:(out&&out.code) || ({401:"session_expired",403:"not_granted",413:"prompt_too_large",415:"image_rejected",429:"rate_limited"})[r.status] || "failed"};
   return out&&out.json;
 }
+const SCAN_MAX=12;   /* photos per scan, read on this device */
+const aiReady=()=>!!(sampleCap && imgLimits);
+/* Backup reader: the read-image function (AI), a few photos per call. Same result shape as readSheetsLocal. */
+async function readSheetsAI(cl,N,imgs,signal){
+  await ensureSample(); if(!aiReady()) throw {code:"images_unavailable"};
+  const out={sheet:"", items:[], notes:"", warns:[], unread:[]}, step=Math.max(1,(imgLimits&&imgLimits.maxCount)||READ_IMAGE_MAX);
+  for(let i=0;i<imgs.length;i+=step){
+    let r=null;
+    for(let k=0;;k++){ try{ r=await sampleCap.json(scanPrompt(cl,N),{images:imgs.slice(i,i+step), signal, modelTier:"default"}); break; }catch(e){ if(k>=1 || !e || e.code!=="rate_limited") throw e; await sleep(5000); } }
+    if(r&&r.sheet&&!out.sheet) out.sheet=r.sheet; if(r&&Array.isArray(r.items)) out.items.push(...r.items); if(r&&r.notes) out.notes=[out.notes,String(r.notes).trim()].filter(Boolean).join("\n");
+  }
+  return out;
+}
 function scanPrompt(cl,N){
   let s=`These photos show pages of a LAMINATED robot checklist from FRC Team 1323, titled "${cl.year} ${cl.name}". Students mark it with dry-erase marker and wipe it clean after every match, so the same sheets are reused.
 Each page holds one section and has a QR code in its top right corner (ignore it). Photos are turned upright before you see them; if a page still looks rotated, read it in its correct orientation.
@@ -2375,7 +2388,8 @@ function scanErr(code){
     rate_limited:"Too many requests right now. Wait a minute, then try again.",
     session_expired:"Your board sign-in expired. Sign in again in Settings, then retry.",
     image_rejected:"That photo couldn't be opened. Take a new photo (JPEG or PNG) and try again.",
-    prompt_too_large:"Too much to read at once. Scan fewer pages at a time."
+    prompt_too_large:"Too much to read at once. Scan fewer pages at a time.",
+    reader_unavailable:"The page reader didn't load. It downloads once the first time it's used, so connect to the internet once, then try again."
   })[code] || "The sheet couldn't be read this time. Retake the photo flat, well lit, with the whole page in frame, then try again.";
 }
 /* Which match a scan is for. "r:<runId>" = an existing match checklist; "m:<matchId>" = an upcoming match, its checklist is created when results are saved. */
@@ -2395,15 +2409,13 @@ async function scanSheet(){
   if(!defaultChecklist()){ toast("Build this season's checklist first."); ui.ckTab="build"; go("checklist"); return; }
   if(!runs.length && !ups.length){ toast("Start a match checklist first, then scan the sheets."); newRunSheet(); return; }
   const curV=cur&&runs.some(r=>r.id===cur.id)?"r:"+cur.id:(runs[0]?"r:"+runs[0].id:"m:"+ups[0].id);
-  await ensureSample();
-  const can=!!(sampleCap && imgLimits);
+  ensureSample();   /* only for the "Read with AI instead" backup; pages are read on this device */
   scan.files=[]; scan.urls.forEach(u=>URL.revokeObjectURL(u)); scan.urls=[]; scan.result=null;
   openSheet({title:"Scan checklist sheets", body:`<div class="form" id="scan-body"></div>`, foot:`<button class="btn" data-close>Close</button><button class="btn primary" data-s="read" id="scan-go" disabled>Read sheet</button>`,
     onClose(){ if(scan.ctl) scan.ctl.abort(); scan.urls.forEach(u=>URL.revokeObjectURL(u)); scan.urls=[]; },
     onMount(el){
       const body=el.querySelector("#scan-body");
-      if(!can){ body.innerHTML=`<div class="notice bad">Photo reading isn't available in this view. Sign in to the board in Settings to scan sheets. You can still mark items done by hand on the Match status tab.</div>`; el.querySelector("#scan-go").hidden=true; return; }
-      const max=imgLimits.maxCount||5;
+      const max=SCAN_MAX;
       body.innerHTML=`<label class="field"><span>Which match is this for?</span><select id="sc-for" style="font-weight:700;font-size:19px">
           ${runs.length?`<optgroup label="Started">${runs.map(r=>{ const x=runState(r); return `<option value="r:${r.id}" ${curV==="r:"+r.id?"selected":""}>${esc(r.label)} · ${x.verified?"verified":x.pct+"% done"}</option>`; }).join("")}</optgroup>`:""}
           ${ups.length?`<optgroup label="Upcoming (starts a new checklist)">${ups.map(m=>`<option value="m:${m.id}" ${curV==="m:"+m.id?"selected":""}>${esc(mlabel(m))}${m.time?" · "+fmtClock(effTime(m)):""}</option>`).join("")}</optgroup>`:""}
@@ -2412,27 +2424,28 @@ async function scanSheet(){
         <div class="scanbig"><label class="btn primary">${ICON.camera}Take photo<input type="file" id="sc-cam" accept="image/*" capture="environment" class="sr"></label>
         <label class="btn">${ICON.image}Choose photos<input type="file" id="sc-pick" accept="image/*" multiple class="sr"></label></div>
         <div class="thumbs" id="sc-thumbs"></div>
-        <small class="muted">Lay each page flat and fill the frame. Lamination shines, so tilt the phone a little or turn off overhead glare until no box is washed out. Up to ${max} pages per scan; scan again for more.</small>
+        <small class="muted">Lay each page flat and fill the frame. Lamination shines, so tilt the phone a little or turn off overhead glare until no box is washed out. Up to ${max} pages per scan; scan again for more. Pages are read on this device; the photos aren't sent anywhere.</small>
         <div id="sc-status"></div>`;
       const add=files=>{ for(const f of files){ if(scan.files.length>=max) break; scan.files.push(f); scan.urls.push(URL.createObjectURL(f)); }
         el.querySelector("#sc-thumbs").innerHTML=scan.urls.map((u,i)=>`<img src="${u}" alt="Page ${i+1} photo">`).join("");
         const g=el.querySelector("#scan-go"); g.disabled=!scan.files.length; g.textContent=`Read ${scan.files.length} page${scan.files.length===1?"":"s"}`; };
       el.querySelector("#sc-cam").addEventListener("change",e=>{ add(e.target.files); e.target.value=""; });
       el.querySelector("#sc-pick").addEventListener("change",e=>{ add(e.target.files); e.target.value=""; });
-      el.addEventListener("click",e=>{ if(e.target.closest('[data-s="read"]')){ const t=scanTarget(el.querySelector("#sc-for").value); if(!t){ toast("Pick which match these sheets are for.","bad"); return; } readScan(el,t); } if(e.target.closest('[data-s="stop"]') && scan.ctl) scan.ctl.abort(); });
+      el.addEventListener("click",e=>{ const rd=e.target.closest('[data-s="read"],[data-s="ai"]'); if(rd){ const t=scanTarget(el.querySelector("#sc-for").value); if(!t){ toast("Pick which match these sheets are for.","bad"); return; } readScan(el,t,rd.dataset.s==="ai"); } if(e.target.closest('[data-s="stop"]') && scan.ctl) scan.ctl.abort(); });
     }});
 }
-async function readScan(el,t){
+async function readScan(el,t,useAI){
   const run=t.run||{id:null,label:t.label}, cl=t.cl;
   const st=el.querySelector("#sc-status"), goBtn=el.querySelector("#scan-go");
   goBtn.disabled=true;
-  st.innerHTML=`<div class="thinking"><span class="spin"></span><span>Reading the sheet… this can take up to a minute.</span><span class="spacer"></span><button class="btn sm" data-s="stop">Stop</button></div>`;
+  st.innerHTML=`<div class="thinking"><span class="spin"></span><span>${useAI?"Reading the sheet with AI… this can take up to a minute.":"Reading the sheet…"}</span><span class="spacer"></span><button class="btn sm" data-s="stop">Stop</button></div>`;
   scan.ctl=new AbortController();
   try{
     const N=numberCl(cl);
     const imgs=[]; for(const f of scan.files) imgs.push(await shrink(f));
-    const out=await sampleCap.json(scanPrompt(cl,N), {images:imgs, signal:scan.ctl.signal, modelTier:"default"});
+    const out=useAI? await readSheetsAI(cl,N,imgs,scan.ctl.signal) : await readSheetsLocal(cl,N,imgs,scan.ctl.signal);
     scan.ctl=null;
+    const lw=(out&&out.warns||[]).join(" ");
     // choose the number→item map for the version that was printed
     const sheet=String(out&&out.sheet||"").toUpperCase().replace(/\s+/g,"");
     const sm=sheet.match(/([A-Z0-9]{4})-?V(\d+)/); let map=N.map, warn="";
@@ -2441,8 +2454,8 @@ async function readScan(el,t){
       else if(Number(sm[2])!==(cl.version||1)){ if(pr&&pr.rows){ map=Object.fromEntries(pr.rows); warn=`This sheet was printed from version ${sm[2]}. Results were matched to that version's items.`; } else warn=`This sheet was printed from version ${sm[2]} but the checklist is now version ${cl.version}. Some item numbers may not match. Reprint for the next match.`; }
     } else warn="The sheet code couldn't be read. Results were matched to the current version.";
     const items={}; (out&&Array.isArray(out.items)?out.items:[]).forEach(x=>{ const no=String(x&&x.no||"").trim().toLowerCase(); const s=String(x&&x.state||"").toLowerCase(); const id=map[no]; if(id && N.byId[id] && ["done","blank","unclear"].includes(s)) items[id]=s; });
-    if(!Object.keys(items).length){ st.innerHTML=`<div class="notice bad">No numbered rows were found. Retake the photo with the whole page in frame.</div>`; goBtn.disabled=false; return; }
-    scan.result={items, notes:String(out.notes||"").trim(), sheet:sm?sm[1]+"-v"+sm[2]:"", warn, by:""};
+    if(!Object.keys(items).length){ st.innerHTML=`<div class="notice bad">${esc(lw||"No numbered rows were found. Retake the photo with the whole page in frame.")}</div>${!useAI&&aiReady()?`<button class="btn" data-s="ai">Read with AI instead (needs internet, sends the photos)</button>`:""}`; goBtn.disabled=false; return; }
+    scan.result={items, notes:String(out.notes||"").trim(), sheet:sm?sm[1]+"-v"+sm[2]:"", warn:[warn,lw].filter(Boolean).join(" "), by:""};
     reviewScan(t,cl,N);
   }catch(e){
     scan.ctl=null;
@@ -2499,8 +2512,7 @@ function loadQrDecoder(){
   if(qrDec) return qrDec;
   qrDec=(async()=>{
     try{ if("BarcodeDetector" in window){ const f=await BarcodeDetector.getSupportedFormats(); if(f.includes("qr_code")){ const bd=new BarcodeDetector({formats:["qr_code"]}); return async c=>(await bd.detect(c)).map(x=>({t:x.rawValue, cx:(x.boundingBox.x+x.boundingBox.width/2)/c.width, cy:(x.boundingBox.y+x.boundingBox.height/2)/c.height, s:Math.min(x.boundingBox.width,x.boundingBox.height)/c.height})); } } }catch(e){}
-    if(!window.jsQR) await new Promise((res,rej)=>{ const sc=document.createElement("script"); sc.src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"; sc.onload=res; sc.onerror=()=>rej(new Error("load")); document.head.appendChild(sc); });
-    if(!window.jsQR) throw new Error("load");
+    await loadJsQr();
     return async c=>{ const d=c.getContext("2d",{willReadFrequently:true}).getImageData(0,0,c.width,c.height); const r=window.jsQR(d.data,d.width,d.height,{inversionAttempts:"dontInvert"}); if(!r) return [];
       const L=r.location, n=pt=>({x:pt.x/c.width, y:pt.y/c.height}), tl=n(L.topLeftCorner), tr=n(L.topRightCorner), br=n(L.bottomRightCorner), bl=n(L.bottomLeftCorner);
       return [{t:r.data, cx:(tl.x+tr.x+br.x+bl.x)/4, cy:(tl.y+tr.y+br.y+bl.y)/4, tl, tr, bl, s:Math.hypot((bl.x-tl.x)*c.width,(bl.y-tl.y)*c.height)/c.height}]; };
@@ -2535,10 +2547,176 @@ async function qsDecodeBlob(blob){ /* page code on a photo, or null */
     c.width=Math.round(bm.width*sc); c.height=Math.round(bm.height*sc); c.getContext("2d").drawImage(bm,0,0,c.width,c.height); if(bm.close) bm.close();
     return qsPageOf(await qs.decode(c)); }catch(e){ return null; }
 }
+/* ---- Reading marked pages on this device: no AI, nothing leaves the device ----
+   A page's QR code says which page it is and where the page sits in the photo. The page layout comes from the same code that
+   prints the PDF, so every checkbox's place on the page is known. Starting next to the code, each printed box is found in the
+   photo and the fit is corrected as boxes are found (tilt, curl); then the marker inside each box is measured. */
+const MARK={ink:0.3, done:0.06, blank:0.02, glare:0.3, edge:0.28, score:0.12, found:0.5};   /* tuned on test photos; see readPageLocal */
+function polyfit(xs,ys,deg){   /* least squares y = c0 + c1 x + c2 x^2 (deg 0..2) */
+  const n=deg+1, M=Array.from({length:n},()=>new Array(n+1).fill(0));
+  xs.forEach((x,i)=>{ const p=[1,x,x*x]; for(let r=0;r<n;r++){ for(let c=0;c<n;c++) M[r][c]+=p[r]*p[c]; M[r][n]+=p[r]*ys[i]; } });
+  for(let i=0;i<n;i++){ let piv=i; for(let r=i+1;r<n;r++) if(Math.abs(M[r][i])>Math.abs(M[piv][i])) piv=r; [M[i],M[piv]]=[M[piv],M[i]]; if(!M[i][i]) return null;
+    for(let r=0;r<n;r++) if(r!==i){ const k=M[r][i]/M[i][i]; for(let c=i;c<=n;c++) M[r][c]-=k*M[i][c]; } }
+  const c=M.map((row,i)=>row[n]/row[i]); while(c.length<3) c.push(0); return x=>c[0]+c[1]*x+c[2]*x*x;
+}
+/* Darkness 0..1 of every pixel against the local paper white (the darkest of R, G, B, so coloured markers count), and glare.
+   Pixels are averaged with their neighbours first so grain from dim light doesn't read as marker; paper white is a high
+   percentile, not the single brightest pixel, for the same reason. I.ink is the darkness that counts as marker on this photo. */
+function markImg(c,bs){
+  const W=c.width, H=c.height, px=c.getContext("2d",{willReadFrequently:true}).getImageData(0,0,W,H).data;
+  const m=new Float32Array(W*H), t=new Float32Array(W*H), G=new Uint8Array(W*H);
+  for(let i=0,j=0;i<m.length;i++,j+=4){ const r=px[j],g=px[j+1],b=px[j+2], lo=r<g?(r<b?r:b):(g<b?g:b); m[i]=lo; G[i]=lo>=246?1:0; }
+  for(let y=0;y<H;y++){ const o=y*W; for(let x=0;x<W;x++) t[o+x]=(m[o+Math.max(0,x-1)]+m[o+x]+m[o+Math.min(W-1,x+1)])/3; }
+  for(let y=0;y<H;y++){ const o=y*W, u=Math.max(0,y-1)*W, d=Math.min(H-1,y+1)*W; for(let x=0;x<W;x++) m[o+x]=(t[u+x]+t[o+x]+t[d+x])/3; }
+  const bw=Math.ceil(W/bs), bh=Math.ceil(H/bs), hist=new Uint32Array(bw*bh*64), cnt=new Uint32Array(bw*bh), p90=new Float32Array(bw*bh);
+  for(let y=0;y<H;y++){ const ry=((y/bs)|0)*bw; for(let x=0;x<W;x+=2){ const k=ry+((x/bs)|0); hist[k*64+(m[y*W+x]>>2)]++; cnt[k]++; } }
+  for(let k=0;k<bw*bh;k++){ let need=cnt[k]*0.1, v=63; while(v>0 && need>hist[k*64+v]){ need-=hist[k*64+v]; v--; } p90[k]=v*4+2; }
+  const dil=new Float32Array(bw*bh);   /* blocks are bigger than a box, and the neighbours' white is used too, so a filled box can't pass for paper */
+  for(let y=0;y<bh;y++) for(let x=0;x<bw;x++){ let v=0; for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++){ const yy=y+dy, xx=x+dx; if(yy>=0&&yy<bh&&xx>=0&&xx<bw&&p90[yy*bw+xx]>v) v=p90[yy*bw+xx]; } dil[y*bw+x]=v; }
+  const D=new Float32Array(W*H), paper=[];
+  for(let y=0;y<H;y++){ const fy=Math.min(bh-1,Math.max(0,y/bs-0.5)), y0=fy|0, y1=Math.min(bh-1,y0+1), ty=fy-y0;
+    for(let x=0;x<W;x++){ const fx=Math.min(bw-1,Math.max(0,x/bs-0.5)), x0=fx|0, x1=Math.min(bw-1,x0+1), tx=fx-x0;
+      const bg=(dil[y0*bw+x0]*(1-tx)+dil[y0*bw+x1]*tx)*(1-ty)+(dil[y1*bw+x0]*(1-tx)+dil[y1*bw+x1]*tx)*ty, i=y*W+x, v=Math.max(0,Math.min(1,(bg-m[i])/Math.max(bg,40)));
+      D[i]=v; if(v<0.2 && !((x+y*7)%13)) paper.push(v); } }
+  paper.sort((a,b)=>a-b); const n95=paper.length?paper[Math.floor(paper.length*0.95)]:0;
+  return {D,G,W,H,ink:Math.max(MARK.ink,2*n95+0.12)};
+}
+/* How well a printed square fits at (cx,cy): a,b = half-side vectors along the page's x and y, in photo pixels.
+   Its four sides must all be dark, with paper just outside and (mostly) just inside, so filled blocks and text don't fit. */
+function boxFit(I,cx,cy,a,b){
+  const {D,W,H}=I, la=Math.hypot(a[0],a[1]), lb=Math.hypot(b[0],b[1]); if(la<3||lb<3) return null;
+  const pa=[a[0]/la,a[1]/la], pb=[b[0]/lb,b[1]/lb], at=(x,y)=>{ x=Math.round(x); y=Math.round(y); return x<0||y<0||x>=W||y>=H?-1:D[y*W+x]; };
+  const S=12; let edges=[1,1,1,1], ring=0, inner=0;
+  const side=(k,sx,sy,f)=>{ /* side k of the square scaled by f: centre offset (sx,sy) in half-sides */
+    const ux=k<2?a:b, perp=k<2?pb:pa; let sum=0;
+    for(let i=0;i<S;i++){ const t=-0.85+1.7*i/(S-1), x=cx+f*(sx*a[0]+sy*b[0])+t*f*ux[0], y=cy+f*(sx*a[1]+sy*b[1])+t*f*ux[1];
+      if(f!==1){ const v=at(x,y); if(v<0) return -1; sum+=v; continue; }
+      const v0=at(x,y), v1=at(x-perp[0],y-perp[1]), v2=at(x+perp[0],y+perp[1]); if(v0<0||v1<0||v2<0) return -1; sum+=Math.max(v0,v1,v2); }
+    return sum/S; };
+  const g=Math.max(3/Math.min(la,lb),0.22), SIDES=[[0,-1],[0,1],[-1,0],[1,0]];   /* top, bottom (run along a); left, right (run along b) */
+  for(let k=0;k<4;k++){ const [sx,sy]=SIDES[k], e=side(k,sx,sy,1), o=side(k,sx,sy,1+g), n=side(k,sx,sy,1-g); if(e<0||o<0||n<0) return null; edges[k]=e; ring+=o/4; inner+=n/4; }
+  const e=Math.min(...edges); return {e, score:e-ring-0.5*inner};
+}
+/* The section number's solid block at the top left of every page: dark inside, paper to its left, above and below. */
+function blockFit(I,cx,cy,a,b){
+  const {D,W,H}=I, at=(s,t)=>{ const x=Math.round(cx+s*a[0]+t*b[0]), y=Math.round(cy+s*a[1]+t*b[1]); return x<0||y<0||x>=W||y>=H?-1:D[y*W+x]; };
+  let inn=0, out=0, n=0, m=0;
+  for(let i=0;i<7;i++) for(let j=0;j<7;j++){ const v=at(-0.7+1.4*i/6,-0.7+1.4*j/6); if(v<0) return null; inn+=v; n++; }
+  for(let i=0;i<9;i++){ const t=-0.8+1.6*i/8; for(const v of [at(-1.45,t),at(t,-1.5),at(t,1.5)]){ if(v<0) return null; out+=v; m++; } }
+  return inn/n-out/m;
+}
+function affFit(pts){   /* weighted least squares X = c0 + c1 u + c2 v (same for Y); pts [u,v,X,Y,w] */
+  const M=[[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0]];
+  pts.forEach(([u,v,X,Y,w])=>{ const p=[1,u,v]; for(let r=0;r<3;r++){ for(let c=0;c<3;c++) M[r][c]+=w*p[r]*p[c]; M[r][3]+=w*p[r]*X; M[r][4]+=w*p[r]*Y; } });
+  for(let i=0;i<3;i++){ let piv=i; for(let r=i+1;r<3;r++) if(Math.abs(M[r][i])>Math.abs(M[piv][i])) piv=r; [M[i],M[piv]]=[M[piv],M[i]]; if(!M[i][i]) return null;
+    for(let r=0;r<3;r++) if(r!==i){ const k=M[r][i]/M[i][i]; for(let c=i;c<5;c++) M[r][c]-=k*M[i][c]; } }
+  const cx=M.map((r,i)=>r[3]/r[i]), cy=M.map((r,i)=>r[4]/r[i]);
+  return {o:[cx[0],cy[0]], ex:[cx[1],cy[1]], ey:[cx[2],cy[2]]};
+}
+function boxSearch(I,px,py,a,b,w){   /* best square near (px,py), within w pixels: every 2 px, then every pixel around the best */
+  let best=null; const sizes=[0.92,1,1.08];
+  const tryAt=(x,y,f)=>{ const r=boxFit(I,x,y,[a[0]*f,a[1]*f],[b[0]*f,b[1]*f]); if(r && (!best||r.score>best.score)) best=Object.assign(r,{x,y,f}); };
+  const W2=Math.ceil(w);
+  for(let dy=-W2;dy<=W2;dy+=2) for(let dx=-W2;dx<=W2;dx+=2) tryAt(Math.round(px+dx),Math.round(py+dy),1);
+  if(!best) return null; const c=best;
+  for(let dy=-2;dy<=2;dy++) for(let dx=-2;dx<=2;dx++) for(const f of sizes) tryAt(c.x+dx,c.y+dy,f);
+  return best;
+}
+/* Share of the box's inside covered by marker, and by glare. */
+function boxInk(I,cx,cy,a,b){
+  const {D,G,W,H}=I, la=Math.hypot(a[0],a[1]), k=1-Math.max(4/la,0.26), n=Math.max(8,Math.round(2*la*k));
+  let ink=0, glare=0, tot=0;
+  for(let i=0;i<n;i++) for(let j=0;j<n;j++){ const s=k*(-1+2*(i+0.5)/n), t=k*(-1+2*(j+0.5)/n), x=Math.round(cx+s*a[0]+t*b[0]), y=Math.round(cy+s*a[1]+t*b[1]);
+    if(x<0||y<0||x>=W||y>=H) continue; const p=y*W+x; tot++; if(D[p]>=I.ink) ink++; else if(G[p]) glare++; }
+  return tot?{ink:ink/tot, glare:glare/tot}:{ink:0,glare:1};
+}
+let jsQrLib=null;
+function loadJsQr(){
+  if(window.jsQR) return Promise.resolve(window.jsQR);
+  if(jsQrLib) return jsQrLib;
+  jsQrLib=new Promise((res,rej)=>{ const s=document.createElement("script"); s.src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"; s.onload=()=>window.jsQR?res(window.jsQR):rej(new Error("load")); s.onerror=()=>{ jsQrLib=null; rej(new Error("load")); }; document.head.appendChild(s); });
+  return jsQrLib;
+}
+/* One photo → {page, items:[{no,state,y}]} or {warn}. y = how far down the photo the box is (0..1). */
+async function readPageLocal(blob,cl,N,L){
+  const bm=await createImageBitmap(blob), c=document.createElement("canvas"); c.width=bm.width; c.height=bm.height; c.getContext("2d").drawImage(bm,0,0); if(bm.close) bm.close();
+  let q=null, src=c, sc=1;   /* the page code's corners; halved copies average out grain from dim light */
+  for(let k=0;k<3;k++){
+    if(k){ const t=document.createElement("canvas"); t.width=Math.max(1,src.width>>1); t.height=Math.max(1,src.height>>1); const tx=t.getContext("2d"); tx.imageSmoothingQuality="high"; tx.drawImage(src,0,0,t.width,t.height); src=t; sc=t.width/c.width; }
+    const d=src.getContext("2d",{willReadFrequently:true}).getImageData(0,0,src.width,src.height);
+    const r=window.jsQR(d.data,src.width,src.height,{inversionAttempts:"dontInvert"}); if(r && clQrParse(r.data)){ const L2=r.location, f=p=>[p.x/sc,p.y/sc]; q={t:r.data, tl:f(L2.topLeftCorner), tr:f(L2.topRightCorner), bl:f(L2.bottomLeftCorner)}; break; } }
+  if(!q) return {warn:"nocode"};
+  const pg=clQrParse(q.t);
+  if(pg.code!==String(cl.code).toUpperCase()) return {warn:"other", page:pg.page, code:pg.code};
+  if(pg.ver!==(cl.version||1)) return {warn:"version", page:pg.page, ver:pg.ver};
+  const noOf={}; N.secs.forEach(s=>s.rows.forEach(r=>{ if(r.no) noOf[r.it.id]=r.no; }));
+  const rows=Object.entries(L).filter(([id,r])=>r.p===pg.page && noOf[id]).map(([id,r])=>Object.assign({id,no:noOf[id]},r)).sort((x,y)=>x.y-y.y);
+  if(!rows.length) return {warn:"version", page:pg.page, ver:pg.ver};
+  /* page points → photo pixels, from the code's corners: the code is printed at CL_QR_BOX */
+  let ex=[(q.tr[0]-q.tl[0])/CL_QR_BOX.s,(q.tr[1]-q.tl[1])/CL_QR_BOX.s], ey=[(q.bl[0]-q.tl[0])/CL_QR_BOX.s,(q.bl[1]-q.tl[1])/CL_QR_BOX.s];
+  let aff=(u,v)=>[q.tl[0]+(u-CL_QR_BOX.x)*ex[0]+(v-CL_QR_BOX.y)*ey[0], q.tl[1]+(u-CL_QR_BOX.x)*ex[1]+(v-CL_QR_BOX.y)*ey[1]];
+  const ppt=(Math.hypot(...ex)+Math.hypot(...ey))/2, maxS=Math.max(...rows.map(r=>r.s));
+  const I=markImg(c,Math.max(24,Math.round(maxS*ppt*2.5)));
+  /* Second anchor across the page from the code: the section number block (PDF: 26 x 22 pt at x 36, y 112). With both, the page's
+     tilt and scale are known well enough that the first rows can't be mistaken for their neighbours. */
+  const SB={x:49,y:123,hw:13,hh:11}, sb0=aff(SB.x,SB.y), ba=[ex[0]*SB.hw,ex[1]*SB.hw], bb=[ey[0]*SB.hh,ey[1]*SB.hh], bl=Math.round(40*ppt);
+  let blk=null;
+  for(let dy=-bl;dy<=bl;dy+=3) for(let dx=-bl;dx<=bl;dx+=3){ const v=blockFit(I,sb0[0]+dx,sb0[1]+dy,ba,bb); if(v!=null && (!blk||v>blk.v)) blk={v,x:sb0[0]+dx,y:sb0[1]+dy}; }
+  if(blk) for(let dy=-2;dy<=2;dy++) for(let dx=-2;dx<=2;dx++){ const v=blockFit(I,blk.x+dx,blk.y+dy,ba,bb); if(v!=null && v>blk.v) blk={v,x:blk.x+dx,y:blk.y+dy}; }
+  const anchored=!!(blk && blk.v>=0.4);
+  if(anchored){ const Q=CL_QR_BOX, f=affFit([[Q.x,Q.y,...q.tl,1],[Q.x+Q.s,Q.y,...q.tr,1],[Q.x,Q.y+Q.s,...q.bl,1],[SB.x,SB.y,blk.x,blk.y,4]]);
+    if(f){ ex=f.ex; ey=f.ey; aff=(u,v)=>[f.o[0]+u*ex[0]+v*ey[0], f.o[1]+u*ex[1]+v*ey[1]]; } }
+  /* Line up the top rows together first: one shift that fits all of them. A single box could be mistaken for its neighbour
+     (a marked box fits less well than a clean one next to it); the whole set of rows only fits in one place. */
+  const top=rows.slice(0,8), pitch=Math.min(...rows.slice(1,9).map((r,i)=>r.y-rows[i].y), maxS*1.45);
+  const lim=Math.round((anchored?Math.max(4,0.4*pitch):Math.max(30,maxS*1.6))*ppt);
+  /* Evenly spaced rows fit almost as well one row off, so there must be no box one row above the first one (that's the section heading). */
+  const r0=rows[0], ghost={x:r0.x, y:r0.y-(rows[1]?rows[1].y-r0.y:r0.s*1.45), s:r0.s};
+  const fitOne=(r,dx,dy)=>{ const p0=aff(r.x,r.y), h=r.s/2, m=boxFit(I,p0[0]+dx,p0[1]+dy,[ex[0]*h,ex[1]*h],[ey[0]*h,ey[1]*h]); return m?Math.max(-0.3,Math.min(1,m.score)):-0.3; };
+  const fitAll=(dx,dy)=>{ let t=-3*Math.max(0,fitOne(ghost,dx,dy)); for(const r of top) t+=fitOne(r,dx,dy); return t; };
+  let sx=0, sy=0, sb=-1e9;
+  for(let dy=-lim;dy<=lim;dy+=3) for(let dx=-lim;dx<=lim;dx+=3){ const t=fitAll(dx,dy); if(t>sb){ sb=t; sx=dx; sy=dy; } }
+  for(let dy=sy-2;dy<=sy+2;dy++) for(let dx=sx-2;dx<=sx+2;dx++){ const t=fitAll(dx,dy); if(t>sb){ sb=t; sx=dx; sy=dy; } }
+  const pairs=[]; let fx=()=>sx, fy=()=>sy;
+  const refit=()=>{ const n=pairs.length, deg=n<3?0:n<6?1:2, vs=pairs.map(p=>p[0]);
+    fx=polyfit(vs,pairs.map(p=>p[1]),deg)||fx; fy=polyfit(vs,pairs.map(p=>p[2]),deg)||fy; };
+  const found={};
+  for(const r of rows){   /* top of the page first: nearest the code */
+    const p0=aff(r.x,r.y), px=p0[0]+fx(r.y), py=p0[1]+fy(r.y), h=r.s/2, a=[ex[0]*h,ex[1]*h], b=[ey[0]*h,ey[1]*h];
+    const w=Math.max(4,0.45*r.s*ppt);
+    const m=boxSearch(I,px,py,a,b,w);
+    if(m && m.e>=MARK.edge && m.score>=MARK.score){ found[r.id]=m; pairs.push([r.y,m.x-p0[0],m.y-p0[1]]); refit(); }
+  }
+  if(pairs.length<Math.max(1,Math.ceil(rows.length*MARK.found))) return {warn:"lineup", page:pg.page};
+  const items=rows.map(r=>{
+    const m=found[r.id], p0=aff(r.x,r.y), x=m?m.x:p0[0]+fx(r.y), y=m?m.y:p0[1]+fy(r.y), h=r.s/2*(m?m.f:1);
+    const k=boxInk(I,x,y,[ex[0]*h,ex[1]*h],[ey[0]*h,ey[1]*h]);
+    const state=k.ink>=MARK.done?"done" : !m||k.glare>=MARK.glare?"unclear" : k.ink<=MARK.blank?"blank" : "unclear";
+    return {no:r.no, state, y:Math.round(Math.max(0,Math.min(1,y/c.height))*1000)/1000, ink:Math.round(k.ink*1000)/1000};
+  });
+  return {page:pg.page, items};
+}
+/* All photos of one scan → the same shape the AI reader returned, plus warnings and the photos that couldn't be read. */
+async function readSheetsLocal(cl,N,blobs,signal){
+  try{ await Promise.all([loadJsQr(), loadPdfLib()]); }catch(e){ throw {code:"reader_unavailable"}; }
+  const L=await rowLayout(cl), out={sheet:(cl.code||"")+"-v"+(cl.version||1), items:[], notes:"", warns:[], unread:[]}, seen=new Set();
+  for(const b of blobs){
+    if(signal && signal.aborted) throw {code:"cancelled"};
+    let r; try{ r=await readPageLocal(b,cl,N,L); }catch(e){ console.warn("read page",e); r={warn:"failed"}; }
+    if(r.items){ if(seen.has(r.page)) { out.warns.push(`Page ${r.page} was in more than one photo; the first one was used.`); continue; } seen.add(r.page); out.items.push(...r.items); continue; }
+    out.unread.push(b);
+    out.warns.push(({nocode:"A photo had no readable page QR code, so it was skipped. Keep the whole page in frame, or reprint sheets made before pages had codes.",
+      other:`A photo was a page of a different checklist (${r.code}), so it was skipped.`,
+      version:`Page ${r.page} was printed from version ${r.ver}, but the checklist is now version ${cl.version||1}. Reprint and laminate it, or mark that page by hand.`,
+      lineup:`Page ${r.page}'s boxes couldn't be lined up. Retake it flat, straight on, with the whole page in frame.`,
+      failed:"A photo couldn't be opened, so it was skipped."})[r.warn]);
+  }
+  return out;
+}
 const qs={};
 function qsReset(){ Object.assign(qs,{t:null,v:"",cl:null,N:null,need:0,secNos:[],shots:0,pending:[],reading:Promise.resolve(),res:{items:{},warns:new Set(),sheet:"",notes:[]},errs:[],failed:[],
   blobs:{}, stream:null,timer:0,wake:null,desk:false,state:"seek",prev:null,ref:null,stable:0,peak:0,closed:false,finishing:false,live:false,undo:null,cv:null,endTimer:0,
-  want:new Set(),captured:new Set(),seen:null,qrBusy:false,qc:null,decode:null,decErr:false}); }
+  want:new Set(),captured:new Set(),seen:null,qrBusy:false,qc:null,decode:null,decErr:false,useAI:false,unread:[]}); }
 function qsPickTarget(){
   const cur=activeRun(), ok=r=>r&&S.checklists[r.checklistId], nm=nextMatch();
   if(ok(cur) && !runScans(cur).length) return "r:"+cur.id;
@@ -2615,6 +2793,7 @@ function qsClick(e){
   else if(a==="undo") qsUndo();
   else if(a==="attn"){ qsClose(); ui.ckTab="status"; PREF.set("ckTab","status"); go("checklist"); }
   else if(a==="retry") qsRetry();
+  else if(a==="ai"){ qs.useAI=true; qs.pending=qs.unread.splice(0); qs.errs=[]; qs.failed=[]; qs.res.warns=new Set(); qs.finishing=false; qsFinish(); }
   else if(a==="more") qsMore();
 }
 function qsMsg(t){ const m=$("#qs-msg"); if(m && m.textContent!==t) m.textContent=t; }
@@ -2708,7 +2887,7 @@ function qsAddShot(blob,page,batch){
   if(page!=null) qs.captured.add(page);
   if(page!=null) qs.blobs[page]=blob;
   qs.shots++; qs.pending.push(blob); qsProg(); if(!qs.live) qsFbLabel();
-  if(qs.pending.length>=Math.max(1,Math.min(4,(imgLimits&&imgLimits.maxCount)||4))) qsFlush();
+  if(qs.pending.length>=(qs.useAI?Math.max(1,Math.min(4,(imgLimits&&imgLimits.maxCount)||4)):1)) qsFlush();   /* on this device: read each page as it comes in */
   if(batch) return;
   if(!qsDoneCheck() && !qs.live) qsMsg(page!=null?`Got ${page} ${qsSecName(page)}. Tap below for the next page.`:`Page saved. Tap below for the next page.`);
 }
@@ -2732,11 +2911,10 @@ function qsFlush(){
   const imgs=qs.pending.splice(0), cl=qs.cl, N=qs.N;
   qs.reading=qs.reading.then(async()=>{
     if(qs.closed) return;
-    await ensureSample(); if(!sampleCap||!imgLimits) throw {code:"images_unavailable"};
-    let out=null;
-    for(let i=0;;i++){ try{ out=await sampleCap.json(scanPrompt(cl,N),{images:imgs,modelTier:"default"}); break; }catch(e){ if(i>=1 || !e || e.code!=="rate_limited") throw e; await sleep(5000); } }
+    const out=qs.useAI? await readSheetsAI(cl,N,imgs) : await readSheetsLocal(cl,N,imgs);
+    (out.warns||[]).forEach(w=>qs.res.warns.add(w)); qs.unread.push(...(out.unread||[]));
     const p=qsParse(out,cl,N); Object.assign(qs.res.items,p.items); Object.assign(qs.res.pos||(qs.res.pos={}),p.pos); if(p.warn) qs.res.warns.add(p.warn); if(p.sheet) qs.res.sheet=p.sheet; if(p.notes) qs.res.notes.push(p.notes);
-    if(!Object.keys(p.items).length) qs.res.warns.add("A page couldn't be read. Its section stays “Not checked yet”.");
+    if(!Object.keys(p.items).length && !(out.warns||[]).length) qs.res.warns.add("A page couldn't be read. Its section stays “Not checked yet”.");
     qsProg();
   }).catch(e=>{ qs.errs.push(e); qs.failed.push(...imgs); });
   return qs.reading;
@@ -2749,8 +2927,11 @@ async function qsFinish(){
   if(qs.closed) return;
   if(!Object.keys(qs.res.items).length){
     const code=qs.errs[0]&&qs.errs[0].code;
-    end.innerHTML=`<div class="qs-card"><h2>Couldn't read the pages</h2><p>${esc(qs.errs.length?scanErr(code):"No checkboxes were found. Hold each page flat and fill the frame.")}</p>
-      <div class="row">${qs.failed.length?`<button class="btn primary" data-q="retry">Try reading again</button>`:""}<button class="btn" data-q="more">Scan again</button><button class="btn ghost" data-q="close">Close</button></div></div>`;
+    const warns=[...qs.res.warns];
+    end.innerHTML=`<div class="qs-card"><h2>Couldn't read the pages</h2><p>${esc(qs.errs.length?scanErr(code):warns.length?"":"No checkboxes were found. Hold each page flat and fill the frame.")}</p>
+      ${warns.map(w=>`<div class="notice warn">${esc(w)}</div>`).join("")}
+      <div class="row">${qs.failed.length?`<button class="btn primary" data-q="retry">Try reading again</button>`:""}<button class="btn" data-q="more">Scan again</button>${!qs.useAI&&qs.unread.length&&aiReady()?`<button class="btn" data-q="ai">Read with AI instead</button>`:""}<button class="btn ghost" data-q="close">Close</button></div>
+      ${!qs.useAI&&qs.unread.length&&aiReady()?`<p class="muted" style="font-size:14px">AI reading needs internet and sends these photos to the board's photo reader.</p>`:""}</div>`;
     return;
   }
   qsSave(); qsSummary();
@@ -2761,7 +2942,7 @@ function qsMore(){ /* scan the pages that are missing (or start over when nothin
   clearTimeout(qs.endTimer);
   const got=new Set(Object.keys(qs.res.items).map(id=>String((qs.N.byId[id]||{}).sNo||"")));
   const miss=qs.secNos.filter(n=>!got.has(n)), missing=miss.length||qs.need;
-  qs.undo=null; qs.res={items:{},pos:{},warns:new Set(),sheet:"",notes:[]}; qs.errs=[]; qs.failed=[]; qs.pending=[]; qs.blobs={};
+  qs.undo=null; qs.res={items:{},pos:{},warns:new Set(),sheet:"",notes:[]}; qs.errs=[]; qs.failed=[]; qs.pending=[]; qs.blobs={}; qs.unread=[];
   qs.shots=0; qs.need=missing; qs.want=new Set(miss.length?miss:qs.secNos); qs.captured=new Set(); qs.seen=null;
   qs.finishing=false; qs.state="seek"; qs.prev=null; qs.ref=null;
   if(qs.t.run && S.runs[qs.t.run.id]) qs.v="r:"+qs.t.run.id;
