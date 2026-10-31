@@ -71,6 +71,8 @@ svg.i.sm{width:18px;height:18px}
 .sync.live i{background:var(--ok)} .sync.local i{background:var(--warn)}
 .iconbtn{display:inline-grid;place-items:center;width:48px;height:48px;border-radius:var(--r);border:1px solid var(--line);background:var(--surface)}
 .iconbtn:hover{background:var(--surface-2)}
+.iconbtn.wide{display:inline-flex;align-items:center;gap:8px;width:auto;padding:0 14px;font-weight:600}
+@media (max-width:480px){ .iconbtn.wide{width:48px;padding:0;justify-content:center} .iconbtn.wide span{display:none} }
 .hchip{display:flex;align-items:center;gap:10px;min-height:48px;padding:4px 14px;border-radius:var(--r);border:1px solid var(--line);background:var(--surface-2);text-align:left}
 .hchip .l{font-family:var(--f-display);font-weight:700;font-size:22px}
 .hchip .s{font-size:14px;color:var(--ink-2);line-height:1.15}
@@ -735,6 +737,7 @@ main:has(.invmaps){max-width:none}
 .hres-row .btn{min-height:56px}
 </style>
 
+<script>try{var t=JSON.parse(localStorage.getItem("pitpref:theme"));if(t==="light"||t==="dark")document.documentElement.dataset.theme=t;}catch(e){}</script>
 <div class="shell">
   <header class="top">
     <div class="brand">
@@ -744,6 +747,7 @@ main:has(.invmaps){max-width:none}
     <button class="hchip" id="h-next" data-go="matches" hidden></button>
     <span class="sync" id="h-sync"><i></i><span>Connecting</span></span>
     <span class="clock" id="h-clock">--:--</span>
+    <button class="iconbtn wide" id="h-theme" data-act="theme" aria-label="Switch to dark theme"></button>
     <button class="iconbtn" data-act="settings" aria-label="Settings"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg></button>
   </header>
   <main id="view"></main>
@@ -799,7 +803,8 @@ const ICON = {
   starf:'<svg class="i sm" viewBox="0 0 24 24" style="fill:currentColor"><path d="M12 3.5l2.6 5.6 6.1.7-4.5 4.2 1.2 6-5.4-3.1-5.4 3.1 1.2-6L3.3 9.8l6.1-.7z"/></svg>',
   edit:'<svg class="i" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>',
   copy:'<svg class="i" viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="12" height="12" rx="2"/><path d="M15.5 8.5v-3a2 2 0 0 0-2-2h-8a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h3"/></svg>',
-  q:'<svg class="i" viewBox="0 0 24 24"><path d="M9.5 9a2.6 2.6 0 1 1 3.5 2.4c-.7.3-1 .9-1 1.6v.5M12 17v.1"/></svg>'
+  q:'<svg class="i" viewBox="0 0 24 24"><path d="M9.5 9a2.6 2.6 0 1 1 3.5 2.4c-.7.3-1 .9-1 1.6v.5M12 17v.1"/></svg>',
+  theme:'<svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5a8.5 8.5 0 0 1 0 17z" style="fill:currentColor"/></svg>'
 };
 
 /* ---------- helpers ---------- */
@@ -2092,6 +2097,20 @@ function confirmBox(msg,label){
 }
 const segVal = (el,name) => { const b=el.querySelector(`.seg[data-name="${name}"] button.on`); return b?b.dataset.v:""; };
 const seg = (name,opts,v,cls) => `<div class="seg ${cls||""}" data-name="${name}">${opts.map(([k,l])=>`<button type="button" data-v="${esc(k)}" class="${String(v)===String(k)?"on":""}">${l}</button>`).join("")}</div>`;
+/* ---- theme (per device; "auto" follows the system setting) ---- */
+const darkMQ = window.matchMedia("(prefers-color-scheme: dark)");
+const themePref = () => { const t=PREF.get("theme","auto"); return t==="light"||t==="dark"?t:"auto"; };
+const themeIsDark = () => { const t=themePref(); return t==="auto"? darkMQ.matches : t==="dark"; };
+function applyTheme(t){
+  if(t!=="light" && t!=="dark") t="auto";
+  PREF.set("theme",t);
+  if(t==="auto") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme=t;
+  paintThemeBtn();
+}
+function paintThemeBtn(){ const b=$("#h-theme"); if(!b) return; const d=themeIsDark();
+  b.innerHTML=ICON.theme+`<span>${d?"Light":"Dark"}</span>`; b.setAttribute("aria-label", d?"Switch to light theme":"Switch to dark theme"); b.title=b.getAttribute("aria-label"); }
+if(darkMQ.addEventListener) darkMQ.addEventListener("change",paintThemeBtn); else if(darkMQ.addListener) darkMQ.addListener(paintThemeBtn);
+
 const val = (el,id) => { const x=el.querySelector("#"+id); return x?String(x.value).trim():""; };
 function toast(msg,kind){ const t=document.createElement("div"); t.className="toast "+(kind||""); t.textContent=msg; const r=$("#toast"); r.appendChild(t); while(r.children.length>3) r.firstChild.remove(); setTimeout(()=>t.remove(), kind==="bad"?6000:2800); }
 
@@ -2104,12 +2123,13 @@ function settingsSheet(){
       <div class="grid2"><label class="field"><span>Queue this many minutes before a match</span><input type="number" id="st-lead" min="0" max="90" value="${esc(s.queueLead)}"></label>
       <label class="field"><span>Field running late (minutes)</span><input type="number" id="st-delay" min="-60" max="240" value="${esc(s.delay)}"><small>Use −5 / +5 on the Matches page during the day.</small></label></div>
       <label class="field"><span>Your name on this device</span><input type="text" id="st-crew" value="${esc(PREF.get("crew",""))}" placeholder="e.g. Ana R."><small>Shown next to checks, repairs and notes made on this device.</small></label>
+      <div class="field"><span>Theme on this device</span>${seg("st-theme",[["auto","Match device"],["light","Light"],["dark","Dark"]],themePref())}<small>The Light / Dark button in the header switches it in one tap.</small></div>
       ${authField()}
       <div class="notice ${Store.mode==="live"?"":"bad"}">${Store.mode==="live"?"Live: every device with this board open sees changes within seconds.":!sb?"Saving in this browser only. Add the Supabase project to the page to share the board across the pit.":me.access==="none"?"Saving in this browser only. This email isn't on the board yet. Ask the owner to add it.":me.id?"Saving in this browser only until the board connects.":"Saving in this browser only. Sign in to share the board across the pit."}${me.readOnly?" You have view-only access.":""}</div>
     </div>`,
     foot:`<button class="btn" data-close>Cancel</button><button class="btn primary" data-s="save">Save settings</button>`,
     onMount(el){ el.addEventListener("click",e=>{ const a=e.target.closest('[data-s="link"],[data-s="signout"]'); if(a){ authClick(el,a); return; } if(!e.target.closest('[data-s="save"]')) return;
-      PREF.set("crew", val(el,"st-crew"));
+      PREF.set("crew", val(el,"st-crew")); applyTheme(segVal(el,"st-theme"));
       saveSettings({team:val(el,"st-team"), eventName:val(el,"st-event"), queueLead:Math.max(0,Number(val(el,"st-lead"))||0), delay:Number(val(el,"st-delay"))||0});
       closeSheet(); toast("Settings saved"); render(); }); } });
 }
@@ -4175,6 +4195,7 @@ document.addEventListener("click", async e=>{
   const a=b.dataset.act, id=b.dataset.id;
   switch(a){
     case "settings": settingsSheet(); break;
+    case "theme": applyTheme(themeIsDark()?"light":"dark"); break;
     case "ck-tab": {
       if(ui.ed && ui.ed.dirty && !(await confirmBox("You have unsaved checklist changes. Leave without saving them?","Discard changes"))) break;
       ui.ed=null; ui.ckTab=b.dataset.v; PREF.set("ckTab",ui.ckTab); if(ui.view!=="checklist") go("checklist",true); else render(); break; }
@@ -4298,6 +4319,7 @@ window.addEventListener("beforeunload", e=>{ if((ui.ed && ui.ed.dirty) || Object
    Boot
    ========================================================= */
 (async function boot(){
+  paintThemeBtn();
   const h=(location.hash||"").slice(1);
   if(/(^|&)error_description=/.test(h)){ const d=new URLSearchParams(h).get("error_description"); authLinkErr=d||"expired or already used"; history.replaceState(null,"",location.pathname+location.search); }
   if(/^b-[a-z0-9]+$/i.test(h)){ ui.pendingBat=h.slice(2); go("batteries",true); } else go(VIEWS[h]?h:PREF.get("view","home"),true);
