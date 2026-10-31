@@ -976,6 +976,12 @@ function hideGate(){ gate.state=null; const el=$("#gate"); if(el){ el.hidden=tru
 /* resolves on Try again, on sign-in, or after ms (0 = no timeout) */
 function gateWait(ms){ return new Promise(res=>{ gate.wake=res; if(ms) setTimeout(res,ms); }); }
 function gateKick(){ const w=gate.wake; gate.wake=null; if(w) w(); }
+/* Supabase sends 429 for two limits: a short per-address wait ("...after 37 seconds") and the project's hourly email cap */
+function linkLimitMsg(error){
+  const m=/after (\d+) seconds?/i.exec(String(error&&error.message||""));
+  return m ? `A link was just sent to this email. Wait ${m[1]} seconds, then try again.`
+    : "The board has sent its limit of sign-in emails for this hour. Try again later, or ask the board owner to raise the email limit in Supabase.";
+}
 function gateMsg(text){ const m=$("#g-msg"); if(m) m.innerHTML=text?`<div class="notice bad">${esc(text)}</div>`:""; }
 async function gateSend(){
   if(gate.busy) return;
@@ -988,7 +994,7 @@ async function gateSend(){
   if(!error){ authLinkErr=""; showGate("sent"); return; }
   const st=Number(error.status)||0;
   gateMsg(mapErr(error).code==="unavailable" ? "Can't reach the board's server to send the email. Check the Wi-Fi or hotspot, then try again."
-    : st===429 ? "Too many sign-in emails. Wait a minute, then try again."
+    : st===429 ? linkLimitMsg(error)
     : "Couldn't send the sign-in email ("+(error.message||"error")+"). Check the address and try again.");
 }
 document.addEventListener("click", e=>{
@@ -2128,7 +2134,7 @@ async function authClick(el,b){
   b.disabled=true;
   const {error}=await sb.auth.signInWithOtp({email, options:{emailRedirectTo:location.origin+location.pathname}});
   b.disabled=false;
-  if(error){ toast(error.status===429?"Too many sign-in emails. Wait a minute, then try again.":"Couldn't send the sign-in email. Check the address and try again.","bad"); return; }
+  if(error){ toast(error.status===429?linkLimitMsg(error):"Couldn't send the sign-in email. Check the address and try again.","bad"); return; }
   toast("Sign-in link sent. Open it from your email on this device.");
 }
 
