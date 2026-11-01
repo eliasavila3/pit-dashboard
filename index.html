@@ -1329,7 +1329,7 @@ function paintStatus(){
     <select id="ck-run">${runs.map(r=>{ const x=runState(r); return `<option value="${r.id}" ${r.id===run.id?"selected":""}>${esc(r.label)} · ${x?(x.verified?"verified":x.pct+"%"):"checklist deleted"} · ${fmtDay(r.createdAt)}</option>`; }).join("")}</select>
     <button class="btn" data-act="new-run">${ICON.plus}New</button>
     ${rs?`<button class="btn primary" data-act="scan">${ICON.camera}Scan sheets</button>`:""}
-    ${rs?(()=>{ const n=scanPicsCount(runPicT(run)); return `<button class="btn" data-act="scan-pics" data-id="${run.id}" ${n?"":`disabled title="Scan photos are kept on the device that took them, until the page is closed"`}>${ICON.image}Download this match's photos (${n})</button>`; })():""}
+    ${rs?(()=>{ const n=scanPicsCount(runPicT(run)); return `<button class="btn" data-act="scan-pics" data-id="${run.id}" ${n?"":`disabled title="Scan photos are kept on the device that took them, until the page is closed"`}>${ICON.image}Download photos (${n})</button>`; })():""}
     ${rs&&(rs.c.done||rs.c.missing||rs.c.unclear)?`<button class="btn" data-act="reset-run">Reset checks</button>`:""}
     <button class="btn ghost" data-act="del-runs">${ICON.trash}Delete old checklists</button>
   </div>`;
@@ -2839,7 +2839,7 @@ function scanPicsAdd(t,cl,blob,page,via){
 function scanPicsNote(imgs,out){ (out&&out.perPhoto||[]).forEach((p,i)=>{ const rec=picRec.get(imgs[i]); if(rec){ rec.read=p; if(p.page&&!rec.page) rec.page=p.page; } }); }
 const runPicT=run=>({matchId:run.matchId||null, run, label:run.label});   /* a match checklist as a scan target, for its photos */
 const scanPicsCount=t=>((scanPics[picKey(t)]||{}).list||[]).length;
-const scanPicsBtn=(t,attr)=>{ const n=scanPicsCount(t); return n?`<button class="btn" ${attr}>${ICON.image}Download this match's photos (${n})</button>`:""; };
+const scanPicsBtn=(t,attr)=>{ const n=scanPicsCount(t); return n?`<button class="btn" ${attr}>${ICON.image}Download photos (${n})</button>`:""; };
 /* A .zip with the files stored as they are (photos are already compressed): one download for all of a match's photos. */
 function zipStore(files){
   const T=zipStore.t||(zipStore.t=Array.from({length:256},(_,n)=>{ let c=n; for(let k=0;k<8;k++) c=c&1?0xEDB88320^(c>>>1):c>>>1; return c>>>0; }));
