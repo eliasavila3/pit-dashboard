@@ -988,7 +988,7 @@ async function boardSignIn(email){
     if(mapErr(e).code==="unavailable") return "Can't reach the board's server. Check the Wi-Fi or hotspot, then try again.";
     if(st===429) return "Too many sign-in tries from this network. Wait a few minutes, then try again.";
     if(c==="user_already_exists" || c==="email_not_confirmed") return "This email's account was made with an emailed link. The board owner needs to run supabase/migrations/2026-11-01-email-sign-in.sql once, then try again.";
-    if(c==="signup_disabled") return "New accounts are turned off in Supabase. The board owner needs to turn on \"Allow new users to sign up\".";
+    if(c==="signup_disabled") return "Can't sign in with this email yet. The board owner needs to run supabase/migrations/2026-11-01-email-sign-in.sql (for accounts made with an emailed link) and turn on \"Allow new users to sign up\" in Supabase (for new members).";
     return "Couldn't sign in ("+(e&&e.message||"error")+").";
   };
   try{
