@@ -2589,7 +2589,7 @@ async function qsDecodeBlob(blob){ /* page code on a photo, or null */
    A page's QR code says which page it is and where the page sits in the photo. The page layout comes from the same code that
    prints the PDF, so every checkbox's place on the page is known. Starting next to the code, each printed box is found in the
    photo and the fit is corrected as boxes are found (tilt, curl); then the marker inside each box is measured. */
-const MARK={ink:0.3, done:0.06, doneLost:0.3, blank:0.02, glare:0.3, edge:0.28, score:0.12, found:0.5};   /* tuned on test photos; see readPageLocal */
+const MARK={ink:0.3, done:0.06, doneLost:0.3, doneBetween:0.15, edgeDone:0.4, blank:0.02, glare:0.3, edge:0.28, score:0.12, found:0.5};   /* tuned on test photos; see readPageLocal */
 function polyfit(xs,ys,deg){   /* least squares y = c0 + c1 x + c2 x^2 (deg 0..2) */
   const n=deg+1, M=Array.from({length:n},()=>new Array(n+1).fill(0));
   xs.forEach((x,i)=>{ const p=[1,x,x*x]; for(let r=0;r<n;r++){ for(let c=0;c<n;c++) M[r][c]+=p[r]*p[c]; M[r][n]+=p[r]*ys[i]; } });
@@ -2602,8 +2602,13 @@ function polyfit(xs,ys,deg){   /* least squares y = c0 + c1 x + c2 x^2 (deg 0..2
    percentile, not the single brightest pixel, for the same reason. I.ink is the darkness that counts as marker on this photo. */
 function markImg(c,bs){
   const W=c.width, H=c.height, px=c.getContext("2d",{willReadFrequently:true}).getImageData(0,0,W,H).data;
-  const m=new Float32Array(W*H), t=new Float32Array(W*H), G=new Uint8Array(W*H);
+  const m=new Float32Array(W*H), t=new Float32Array(W*H), G=new Uint8Array(W*H), C=new Uint8Array(W*H);
   for(let i=0,j=0;i<m.length;i++,j+=4){ const r=px[j],g=px[j+1],b=px[j+2], lo=r<g?(r<b?r:b):(g<b?g:b); m[i]=lo; G[i]=lo>=246?1:0; }
+  /* Coloured marker (blue, red, green): measured after evening out the room light's colour cast (paper reads as white), so a
+     coloured stroke can be told apart from the black printed box even where it runs over the box's edge. */
+  const wb=[0,0,0]; let wn=0; for(let j=0;j<px.length;j+=28){ const L=px[j]+px[j+1]+px[j+2]; if(L>360){ wb[0]+=px[j]; wb[1]+=px[j+1]; wb[2]+=px[j+2]; wn++; } }
+  const wmax=wn?Math.max(wb[0],wb[1],wb[2]):1, kr=wn?wmax/Math.max(1,wb[0]):1, kg=wn?wmax/Math.max(1,wb[1]):1, kb=wn?wmax/Math.max(1,wb[2]):1;
+  for(let i=0,j=0;i<m.length;i++,j+=4){ const r=px[j]*kr, g=px[j+1]*kg, b=px[j+2]*kb, hi=Math.max(r,g,b), lo=Math.min(r,g,b); C[i]=(hi-lo)>=45 && (hi-lo)>=0.35*hi?1:0; }
   for(let y=0;y<H;y++){ const o=y*W; for(let x=0;x<W;x++) t[o+x]=(m[o+Math.max(0,x-1)]+m[o+x]+m[o+Math.min(W-1,x+1)])/3; }
   for(let y=0;y<H;y++){ const o=y*W, u=Math.max(0,y-1)*W, d=Math.min(H-1,y+1)*W; for(let x=0;x<W;x++) m[o+x]=(t[u+x]+t[o+x]+t[d+x])/3; }
   const bw=Math.ceil(W/bs), bh=Math.ceil(H/bs), hist=new Uint32Array(bw*bh*64), cnt=new Uint32Array(bw*bh), p90=new Float32Array(bw*bh);
@@ -2617,7 +2622,7 @@ function markImg(c,bs){
       const bg=(dil[y0*bw+x0]*(1-tx)+dil[y0*bw+x1]*tx)*(1-ty)+(dil[y1*bw+x0]*(1-tx)+dil[y1*bw+x1]*tx)*ty, i=y*W+x, v=Math.max(0,Math.min(1,(bg-m[i])/Math.max(bg,40)));
       D[i]=v; if(v<0.2 && !((x+y*7)%13)) paper.push(v); } }
   paper.sort((a,b)=>a-b); const n95=paper.length?paper[Math.floor(paper.length*0.95)]:0;
-  return {D,G,W,H,ink:Math.max(MARK.ink,2*n95+0.12)};
+  return {D,G,C,W,H,ink:Math.max(MARK.ink,2*n95+0.12)};
 }
 /* How well a printed square fits at (cx,cy): a,b = half-side vectors along the page's x and y, in photo pixels.
    Its four sides must all be dark, with paper just outside and (mostly) just inside, so filled blocks and text don't fit. */
@@ -2699,12 +2704,18 @@ function boxSearch(I,px,py,a,b,w,inked){   /* best square near (px,py), within w
   return best;
 }
 /* Share of the box's inside covered by marker, and by glare. */
+/* Share of the box's inside covered by marker, and by glare. edge: coloured marker in the strip just inside the printed
+   outline, on the side where it covers most (a stroke run down the column along the boxes' edges covers a whole side; the
+   tail of a neighbour's tick only pokes into a corner). Only coloured ink counts there, never the black outline. */
 function boxInk(I,cx,cy,a,b){
-  const {D,G,W,H}=I, la=Math.hypot(a[0],a[1]), k=1-Math.max(4/la,0.26), n=Math.max(8,Math.round(2*la*k));
-  let ink=0, glare=0, tot=0;
-  for(let i=0;i<n;i++) for(let j=0;j<n;j++){ const s=k*(-1+2*(i+0.5)/n), t=k*(-1+2*(j+0.5)/n), x=Math.round(cx+s*a[0]+t*b[0]), y=Math.round(cy+s*a[1]+t*b[1]);
-    if(x<0||y<0||x>=W||y>=H) continue; const p=y*W+x; tot++; if(D[p]>=I.ink) ink++; else if(G[p]) glare++; }
-  return tot?{ink:ink/tot, glare:glare/tot}:{ink:0,glare:1};
+  const {D,G,C,W,H}=I, la=Math.hypot(a[0],a[1]), lb=Math.hypot(b[0],b[1]), k=1-Math.max(4/la,0.26), ke=1-Math.max(2.5/Math.min(la,lb),0.1), n=Math.max(8,Math.round(2*la*ke));
+  let ink=0, glare=0, tot=0; const es=[0,0,0,0], en=[0,0,0,0];
+  for(let i=0;i<n;i++) for(let j=0;j<n;j++){ const s=ke*(-1+2*(i+0.5)/n), t=ke*(-1+2*(j+0.5)/n), x=Math.round(cx+s*a[0]+t*b[0]), y=Math.round(cy+s*a[1]+t*b[1]);
+    if(x<0||y<0||x>=W||y>=H) continue; const p=y*W+x, dark=D[p]>=I.ink;
+    if(Math.abs(s)<=k && Math.abs(t)<=k){ tot++; if(dark) ink++; else if(G[p]) glare++; }
+    else { const sd=Math.abs(s)>=Math.abs(t)?(s<0?0:1):(t<0?2:3); en[sd]++; if(dark && C[p]) es[sd]++; } }
+  const edge=Math.max(...es.map((v,i)=>en[i]?v/en[i]:0));
+  return tot?{ink:ink/tot, glare:glare/tot, edge}:{ink:0,glare:1,edge:0};
 }
 let jsQrLib=null;
 function loadJsQr(){
@@ -2798,12 +2809,17 @@ async function readPageLocal(blob,cl,N,L){
     if(h) for(let i=0;i<rows.length;i++){ const r=rows[i], m=found[r.id]; if(!m) continue;
       const gap=Math.min(i?r.y-rows[i-1].y:1e9, i+1<rows.length?rows[i+1].y-r.y:1e9, r.s*1.45), p=h(r.x,r.y), q=h(r.x,r.y+1), unit=Math.hypot(q[0]-p[0],q[1]-p[1]);
       if(Math.hypot(m.x-p[0],m.y-p[1])>0.33*gap*unit){ delete found[r.id]; const k=pairs.findIndex(x=>x[0]===r.x&&x[1]===r.y); if(k>=0) pairs.splice(k,1); } } }
-  if(pairs.length<Math.max(1,Math.ceil(rows.length*MARK.found))){ const t=q.br&&qrTilt([q.tl,q.tr,q.br,q.bl]); return {warn:"lineup", page:pg.page, steep:!!(t&&t.tilt>32)}; }
-  const items=rows.map(r=>{
-    const m=found[r.id], L=local(r,m?m.f:1), x=m?m.x:L.p[0], y=m?m.y:L.p[1];
+  /* Enough to read the page: half the boxes found, or boxes found at the top and the bottom of the column (marker run down
+     the column can hide the boxes in between; their places follow from the boxes around them). */
+  const idx=rows.map((r,i)=>found[r.id]?i:-1).filter(i=>i>=0), lo=idx.length?idx[0]:-1, hi=idx.length?idx[idx.length-1]:-1;
+  const spans=idx.length>=3 && lo<=1 && hi>=rows.length-2;
+  if(!spans && pairs.length<Math.max(1,Math.ceil(rows.length*MARK.found))){ const t=q.br&&qrTilt([q.tl,q.tr,q.br,q.bl]); return {warn:"lineup", page:pg.page, steep:!!(t&&t.tilt>32)}; }
+  const items=rows.map((r,i)=>{
+    const m=found[r.id], L=local(r,m?m.f:1), x=m?m.x:L.p[0], y=m?m.y:L.p[1], between=!m && i>lo && i<hi;
     const k=boxInk(I,x,y,L.a,L.b);
-    /* a box that wasn't found in the photo only counts as done when it's clearly full of marker; otherwise a person checks it */
-    const state=k.ink>=(m?MARK.done:MARK.doneLost)?"done" : !m||k.glare>=MARK.glare?"unclear" : k.ink<=MARK.blank?"blank" : "unclear";
+    /* A box that wasn't found in the photo: between found boxes its place is known, so marker over it counts; above or below
+       all of them, only a box clearly full of marker counts. Anything else there is left for a person to check. */
+    const state=k.ink>=(m?MARK.done:between?MARK.doneBetween:MARK.doneLost) || ((m||between) && k.edge>=MARK.edgeDone)?"done" : !m||k.glare>=MARK.glare?"unclear" : k.ink<=MARK.blank?"blank" : "unclear";
     return {no:r.no, state, y:Math.round(Math.max(0,Math.min(1,y/c.height))*1000)/1000, ink:Math.round(k.ink*1000)/1000};
   });
   return {page:pg.page, items};
