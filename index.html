@@ -4198,18 +4198,50 @@ async function beakPrep(file,invert){
 }
 /* Numbers from the screen text. Voltage: volts between 9 and 15 (the highest is the no-load reading). Charge: a percentage.
    Internal resistance: milliohms or ohms, or a 0.0xx value; OCR often reads Ω as O, Q or 0. */
+/* The Beak's screen draws zero with a slash through it, which the reader takes for 8, 6, "a" or "©". Look at each character in
+   a number (or a label like "V0:") across its middle: a slashed zero has three bits of ink there (side, slash, side) or two
+   (sides only, a plain zero); 8, 6 and 9 have a bar across the middle. Returns the text with those characters as 0. */
+function beakText(c,data){
+  if(!data || !Array.isArray(data.blocks)) return data&&data.text||"";
+  const W=c.width, H=c.height, px=c.getContext("2d",{willReadFrequently:true}).getImageData(0,0,W,H).data, ink=(x,y)=>px[(y*W+x)*4]<128;
+  const runs=(b,f)=>{ const y=Math.round(b.y0+(b.y1-b.y0)*f); let n=0, on=false; for(let x=Math.max(0,b.x0);x<=Math.min(W-1,b.x1);x++){ const k=y>=0&&y<H&&ink(x,y); if(k&&!on) n++; on=k; } return n; };
+  const isZero=b=>{ const r=[0.4,0.5,0.6].map(f=>runs(b,f)); return r.some(n=>n>=3) || r.every(n=>n===2); };
+  const lines=[];
+  data.blocks.forEach(bl=>(bl.paragraphs||[]).forEach(pa=>(pa.lines||[]).forEach(li=>{
+    lines.push((li.words||[]).map(wd=>{ const sy=wd.symbols||[], t=sy.map(x=>x.text).join("");
+      if(!/[0-9.]/.test(t) && !/^[VU].?:?$/.test(t)) return t;
+      return sy.map(x=>/^[0689©OoQDa]$/.test(x.text) && isZero(x.bbox)? "0" : x.text).join(""); }).join(" "));
+  })));
+  return lines.join("\n");
+}
 function beakParse(text){
   const t=String(text||"").replace(/,/g,".").replace(/\s+/g," ");
   const num=s=>{ const v=Number(s); return isFinite(v)?v:null; };
   let v=null, p=null, r=null, m;
-  const vre=/(\d{1,2}\.\d{1,3})\s*V\b/gi; while((m=vre.exec(t))){ const x=num(m[1]); if(x>=9 && x<=15 && (v==null||x>v)) v=x; }
-  if(v==null){ const bare=/(?:^|[^\d.])(1[0-4]\.\d{2})(?![\d.])/g; while((m=bare.exec(t))){ const x=num(m[1]); if(x>=9 && x<=15 && (v==null||x>v)) v=x; } }
-  const pre=/(\d{1,3}(?:\.\d)?)\s*%/g; while((m=pre.exec(t))){ const x=num(m[1]); if(x>=0 && x<=100){ p=x; break; } }
+  /* The Battery Beak's own screen: "Charge: 88%", "V0: 12.840 @ 0 Amps" (no load), "V1: ... @ 1 Amp", "V2: ... @ 18 Amps",
+     "Rint: 0.015 Ohms". Each voltage line is known by its current (read better than the V0/V1/V2 labels). */
+  const at={}, are=/(\d{1,2}[.,]\d{1,3})\s*@\s*(\S{1,3})\s*Amp/gi;
+  while((m=are.exec(t))){ const x=num(m[1].replace(",",".")), a=Number(m[2].replace(/[O©QDo]/g,"0").replace(/[lI|]/g,"1"));
+    if(x>=4 && x<=16 && [0,1,18].includes(a) && at[a]==null) at[a]=x; }
+  if(at[0]==null && (m=/[VU][0O]\W{0,2}(\d{1,2}\.\d{1,3})/.exec(t)) && num(m[1])>=4 && num(m[1])<=16) at[0]=num(m[1]);
+  const beak=Object.keys(at).length>0; if(at[0]!=null) v=at[0];   /* the no-load voltage; never V1 or V2 instead */
+  if((m=/Charge\D{0,3}(\d{1,3})\s*%/i.exec(t)) && num(m[1])<=100) p=num(m[1]);
+  if((m=/R\s*int\W{0,3}(\d{1,2}[.,]\d{1,4})\s*(m?)\s*(?:Ohm|0hm|Ω)/i.exec(t))){ let x=num(m[1].replace(",","."));
+    if(x>=1 && /^[689]\./.test(m[1]) && !m[2]) x=num("0"+m[1].slice(1));   /* a slashed 0 read as 6, 8 or 9: these batteries are well under 1 ohm */
+    if(m[2]) x=x/1000; if(x>0 && x<0.3) r=x; }   /* a 12 V robot battery is well under 0.3 ohm, even a bad one */
+  const vre=/(\d{1,2}\.\d{1,3})\s*V\b/gi; while(v==null && !beak && (m=vre.exec(t))){ const x=num(m[1]); if(x>=9 && x<=15 && (v==null||x>v)) v=x; }
+  if(v==null && !beak){ const bare=/(?:^|[^\d.])(1[0-4]\.\d{2})(?![\d.])/g; while((m=bare.exec(t))){ const x=num(m[1]); if(x>=9 && x<=15 && (v==null||x>v)) v=x; } }
+  const pre=/(\d{1,3}(?:\.\d)?)\s*%/g; while(p==null && (m=pre.exec(t))){ const x=num(m[1]); if(x>=0 && x<=100){ p=x; break; } }
   if(p==null){ const s2=/SO[C0]\s*:?\s*(\d{1,3})/i.exec(t); if(s2 && num(s2[1])<=100) p=num(s2[1]); }
-  const mre=/(\d{1,3}(?:\.\d{1,2})?)\s*m\s*(?:Ω|ohms?|[OQ0](?![\d.]))/gi; if((m=mre.exec(t))){ const x=num(m[1]); if(x>0 && x<200) r=x/1000; }
+  const mre=/(\d{1,3}(?:\.\d{1,2})?)\s*m\s*(?:Ω|ohms?|[OQ0](?![\d.]))/gi; if(r==null && (m=mre.exec(t))){ const x=num(m[1]); if(x>0 && x<200) r=x/1000; }
   if(r==null){ const ore=/(0\.\d{2,4})\s*(?:Ω|ohms?)?/gi; while((m=ore.exec(t))){ const x=num(m[1]); if(x>0.002 && x<0.2){ r=x; break; } } }
   if(r==null){ const lre=/(?:R\s*int|IR|Res\w*)\s*:?\s*(\d{1,3}(?:\.\d{1,3})?)/i.exec(t); if(lre){ const x=num(lre[1]); if(x>0.002 && x<0.2) r=x; else if(x>=2 && x<200) r=x/1000; } }
-  return {v,p,r};
+  /* The Beak works out Rint from the drop between 1 A and 18 A: Rint = (V1 - V2) / 17, and V0 >= V1 >= V2. With all of them
+     read, a misread digit almost always breaks this. checked: true (they agree), false (they don't), null (can't tell). */
+  let checked=null;
+  if(at[1]!=null && at[18]!=null && r!=null){ const calc=(at[1]-at[18])/17;
+    checked=(v==null||v>=at[1]-0.005) && at[1]>=at[18] && Math.abs(calc-r)<=Math.max(0.003,0.15*r); }
+  return {v,p,r,checked};
 }
 async function readBeakPhoto(file,el,sync){
   const st=el.querySelector("#bl-pst");
@@ -4220,12 +4252,13 @@ async function readBeakPhoto(file,el,sync){
     const score=o=>(o.v!=null)+(o.p!=null)+(o.r!=null);
     for(const inv of [null,"other"]){   /* if the first pass misses numbers, try the screen the other way round (light on dark) */
       const pr=await beakPrep(file, inv==null?null:!best.flip); best.flip=pr.flip;
-      const out=await w.recognize(pr.c); const o=beakParse(out&&out.data&&out.data.text);
-      if(score(o)>score(best)){ best=Object.assign(o,{flip:pr.flip}); text=out.data.text||""; }
+      const out=await w.recognize(pr.c,{},{text:true,blocks:true}), tx=beakText(pr.c,out&&out.data), o=beakParse(tx);
+      if(score(o)>score(best)){ best=Object.assign(o,{flip:pr.flip}); text=tx; }
       if(score(best)===3) break;
     }
-    const {v,p,r}=best;
-    if(v==null&&p==null&&r==null){ st.textContent="No readings found in that photo. Type the numbers in, or retake it straight on with the screen filling the frame."; return; }
+    let {v,p,r}=best;
+    if(best.checked===false){ v=null; r=null; }   /* the Beak's numbers didn't agree with each other: don't fill in a wrong one */
+    if(v==null&&p==null&&r==null){ st.textContent=best.checked===false? "The voltage and resistance on the photo didn't add up, so nothing was filled in. Type the numbers, or retake the photo straight on." : "No readings found in that photo. Type the numbers in, or retake it straight on with the screen filling the frame."; return; }
     if(v!=null) el.querySelector("#bl-v").value=v.toFixed(2);
     if(p!=null) el.querySelector("#bl-pct").value=String(Math.round(p));
     if(r!=null) el.querySelector("#bl-ir").value=r.toFixed(3);
@@ -4235,7 +4268,9 @@ async function readBeakPhoto(file,el,sync){
     if(lb){ const btn=el.querySelector(`.seg[data-name="bat"] button[data-v="${lb.id}"]`); if(btn){ $$("button",btn.parentElement).forEach(x=>x.classList.toggle("on",x===btn)); } }
     sync&&sync();
     const miss=[v==null&&"voltage",p==null&&"charge",r==null&&"internal resistance"].filter(Boolean);
-    st.textContent = miss.length? `Filled in what it could read. Type the ${miss.join(" and ")}, and check every number before saving.` : "Filled in from the photo. Check every number before saving.";
+    st.textContent = best.checked===false? `The voltage and resistance on the photo didn't add up, so they weren't filled in. Type them, or retake the photo straight on.${p!=null?" Check the charge before saving.":""}`
+      : miss.length? `Filled in what it could read. Type the ${miss.join(" and ")}, and check every number before saving.`
+      : best.checked? "Filled in from the photo; the Beak's readings agree with each other. Check them before saving." : "Filled in from the photo. Check every number before saving.";
   }catch(e){ console.warn("beak photo",e); st.textContent="That photo couldn't be read. Type the numbers instead."; }
 }
 /* Why a battery shouldn't run match m, or "" if it's fine. Used by the pick sheet to ask before assigning. */
