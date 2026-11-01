@@ -252,6 +252,8 @@ button.tile:hover{border-color:var(--brand)}
 .qs.fb .qs-frame{display:none}
 .qs-frame.good{border-style:solid;border-color:var(--ok);opacity:1}
 .qs-frame.warn{border-color:var(--warn);opacity:1}
+.bs-box{position:absolute;left:8%;right:8%;top:50%;transform:translateY(-50%);aspect-ratio:2/1;max-height:80%;margin:0 auto;border:3px dashed var(--on-brand);border-radius:12px;opacity:.85;pointer-events:none}
+.bs-box.good{border-style:solid;border-color:var(--ok);opacity:1}
 .qs-prog{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .qs-count{font-family:var(--f-mono);font-weight:600;font-size:16px}
 .qs-chips{display:flex;gap:5px;flex-wrap:wrap}
@@ -4058,7 +4060,7 @@ function irChart(logs){
 
 /* ---- view ---- */
 VIEWS.batteries = {
-shell:()=>`<div class="pagehead"><h1>Batteries</h1><div class="row"><button class="btn" data-act="bat-cfg">Grade cutoffs</button><button class="btn" data-act="bat-labels">${ICON.print}Print labels</button><button class="btn" data-act="bat-new">${ICON.plus}Add battery</button><button class="btn primary" data-act="bat-log">${ICON.batteries}Log check</button></div></div><div id="v-body"></div>`,
+shell:()=>`<div class="pagehead"><h1>Batteries</h1><div class="row"><button class="btn" data-act="bat-cfg">Grade cutoffs</button><button class="btn" data-act="bat-labels">${ICON.print}Print labels</button><button class="btn" data-act="bat-new">${ICON.plus}Add battery</button><button class="btn" data-act="bat-log">${ICON.batteries}Log check</button><button class="btn primary" data-act="bat-scan">${ICON.camera}Scan battery</button></div></div><div id="v-body"></div>`,
 paint(){
   const body=$("#v-body"), bats=batsSorted();
   if(!bats.length){ body.innerHTML=`<div class="card empty"><h3>No batteries yet</h3><p>Add each battery with the number on its label. Then log Battery Beak readings when it comes off the charger and before and after each match. The app grades each battery and picks the best one for the next match.</p><button class="btn primary" data-act="bat-new">${ICON.plus}Add battery</button></div>`; return; }
@@ -4119,7 +4121,7 @@ function batEditSheet(id){
       if(b && b.label!==label) Object.values(S.matches).filter(m=>m.batteryId===bid).forEach(m=>write("matches",m.id,"update",{battery:label}));
       closeSheet(); toast(b?"Battery saved":`${label} added`); if(!b) batLogSheet(bid,"charged"); }); } });
 }
-function batLogSheet(batId,kind,matchId){
+function batLogSheet(batId,kind,matchId,pre){   /* pre: {v,p,r} read by the camera (batScan) */
   const bats=batsSorted().filter(b=>!b.retired);
   if(!bats.length){ toast("Add a battery first."); batEditSheet(); return; }
   const nm=nextMatch(), t=now();
@@ -4167,6 +4169,8 @@ function batLogSheet(batId,kind,matchId){
         closeSheet(); toast(msg, ir!=null&&ir>cfg.irRetire?"bad":"");
       });
       const ph=el.querySelector("#bl-photo"); if(ph) ph.addEventListener("change",async e=>{ const f=e.target.files&&e.target.files[0]; e.target.value=""; if(f) readBeakPhoto(f,el,sync); });
+      if(pre){ if(pre.v!=null) el.querySelector("#bl-v").value=pre.v.toFixed(2); if(pre.p!=null) el.querySelector("#bl-pct").value=String(Math.round(pre.p)); if(pre.r!=null) el.querySelector("#bl-ir").value=pre.r.toFixed(3);
+        el.dataset.via="camera"; el.querySelector("#bl-pst").textContent=`Read by the camera; the Beak's readings agree with each other.${pre.p==null?" Type the charge.":""} Check them, then save.`; }
       sync();
     }});
 }
@@ -4199,13 +4203,13 @@ async function beakPrep(file,invert){
 /* Numbers from the screen text. Voltage: volts between 9 and 15 (the highest is the no-load reading). Charge: a percentage.
    Internal resistance: milliohms or ohms, or a 0.0xx value; OCR often reads Ω as O, Q or 0. */
 /* The Beak's screen draws zero with a slash through it, which the reader takes for 8, 6, "a" or "©". Look at each character in
-   a number (or a label like "V0:") across its middle: a slashed zero has three bits of ink there (side, slash, side) or two
-   (sides only, a plain zero); 8, 6 and 9 have a bar across the middle. Returns the text with those characters as 0. */
+   a number (or a label like "V0:") across its middle: a slashed zero has three bits of ink there (side, slash, side); 8, 6 and
+   9 have a bar across the middle instead. Returns the text with those characters as 0. */
 function beakText(c,data){
   if(!data || !Array.isArray(data.blocks)) return data&&data.text||"";
   const W=c.width, H=c.height, px=c.getContext("2d",{willReadFrequently:true}).getImageData(0,0,W,H).data, ink=(x,y)=>px[(y*W+x)*4]<128;
   const runs=(b,f)=>{ const y=Math.round(b.y0+(b.y1-b.y0)*f); let n=0, on=false; for(let x=Math.max(0,b.x0);x<=Math.min(W-1,b.x1);x++){ const k=y>=0&&y<H&&ink(x,y); if(k&&!on) n++; on=k; } return n; };
-  const isZero=b=>{ const r=[0.4,0.5,0.6].map(f=>runs(b,f)); return r.some(n=>n>=3) || r.every(n=>n===2); };
+  const isZero=b=>[0.3,0.4,0.5,0.6,0.7].some(f=>runs(b,f)>=3);   /* the slash: three bits of ink across (an 8, 6 or 9 never has three) */
   const lines=[];
   data.blocks.forEach(bl=>(bl.paragraphs||[]).forEach(pa=>(pa.lines||[]).forEach(li=>{
     lines.push((li.words||[]).map(wd=>{ const sy=wd.symbols||[], t=sy.map(x=>x.text).join("");
@@ -4224,15 +4228,15 @@ function beakParse(text){
   while((m=are.exec(t))){ const x=num(m[1].replace(",",".")), a=Number(m[2].replace(/[O©QDo]/g,"0").replace(/[lI|]/g,"1"));
     if(x>=4 && x<=16 && [0,1,18].includes(a) && at[a]==null) at[a]=x; }
   if(at[0]==null && (m=/[VU][0O]\W{0,2}(\d{1,2}\.\d{1,3})/.exec(t)) && num(m[1])>=4 && num(m[1])<=16) at[0]=num(m[1]);
-  const beak=Object.keys(at).length>0; if(at[0]!=null) v=at[0];   /* the no-load voltage; never V1 or V2 instead */
+  const beak=Object.keys(at).length>0 || /R\s*int\W|Charge\W/i.test(t); if(at[0]!=null) v=at[0];   /* the Beak's screen: its lines or labels */   /* the no-load voltage; never V1 or V2 instead */
   if((m=/Charge\D{0,3}(\d{1,3})\s*%/i.exec(t)) && num(m[1])<=150) p=num(m[1]);   /* the Beak shows over 100% for a fresh charge */
   if((m=/R\s*int\W{0,3}(\d{1,2}[.,]\d{1,4})\s*(m?)\s*(?:Ohm|0hm|Ω)/i.exec(t))){ let x=num(m[1].replace(",","."));
     if(x>=1 && /^[689]\./.test(m[1]) && !m[2]) x=num("0"+m[1].slice(1));   /* a slashed 0 read as 6, 8 or 9: these batteries are well under 1 ohm */
     if(m[2]) x=x/1000; if(x>0 && x<0.3) r=x; }   /* a 12 V robot battery is well under 0.3 ohm, even a bad one */
   const vre=/(\d{1,2}\.\d{1,3})\s*V\b/gi; while(v==null && !beak && (m=vre.exec(t))){ const x=num(m[1]); if(x>=9 && x<=15 && (v==null||x>v)) v=x; }
   if(v==null && !beak){ const bare=/(?:^|[^\d.])(1[0-4]\.\d{2})(?![\d.])/g; while((m=bare.exec(t))){ const x=num(m[1]); if(x>=9 && x<=15 && (v==null||x>v)) v=x; } }
-  const pre=/(\d{1,3}(?:\.\d)?)\s*%/g; while(p==null && (m=pre.exec(t))){ const x=num(m[1]); if(x>=0 && x<=100){ p=x; break; } }
-  if(p==null){ const s2=/SO[C0]\s*:?\s*(\d{1,3})/i.exec(t); if(s2 && num(s2[1])<=100) p=num(s2[1]); }
+  const pre=/(\d{1,3}(?:\.\d)?)\s*%/g; while(p==null && !beak && (m=pre.exec(t))){   /* on the Beak's screen, only its "Charge:" line */ const x=num(m[1]); if(x>=0 && x<=100){ p=x; break; } }
+  if(p==null && !beak){ const s2=/SO[C0]\s*:?\s*(\d{1,3})/i.exec(t); if(s2 && num(s2[1])<=100) p=num(s2[1]); }
   const mre=/(\d{1,3}(?:\.\d{1,2})?)\s*m\s*(?:Ω|ohms?|[OQ0](?![\d.]))/gi; if(r==null && (m=mre.exec(t))){ const x=num(m[1]); if(x>0 && x<200) r=x/1000; }
   if(r==null){ const ore=/(0\.\d{2,4})\s*(?:Ω|ohms?)/gi; while((m=ore.exec(t))){ const x=num(m[1]); if(x>0.002 && x<0.2){ r=x; break; } } }   /* with a unit: a bare 0.0xx in misread text isn't a reading */
   if(r==null){ const lre=/(?:R\s*int|IR|Res\w*)\s*:?\s*(\d{1,3}(?:\.\d{1,3})?)/i.exec(t); if(lre){ const x=num(lre[1]); if(x>0.002 && x<0.2) r=x; else if(x>=2 && x<200) r=x/1000; } }
@@ -4241,7 +4245,7 @@ function beakParse(text){
   let checked=null;
   if(at[1]!=null && at[18]!=null && r!=null){ const calc=(at[1]-at[18])/17;
     checked=(v==null||v>=at[1]-0.005) && at[1]>=at[18] && Math.abs(calc-r)<=Math.max(0.003,0.15*r); }
-  return {v,p,r,checked};
+  return {v,p,r,checked,beak};
 }
 async function readBeakPhoto(file,el,sync){
   const st=el.querySelector("#bl-pst");
@@ -4257,8 +4261,9 @@ async function readBeakPhoto(file,el,sync){
       if(score(best)>=3.5 || (score(best)===3 && best.checked==null)) break;
     }
     let {v,p,r}=best;
-    if(best.checked===false){ v=null; r=null; }   /* the Beak's numbers didn't agree with each other: don't fill in a wrong one */
-    if(v==null&&p==null&&r==null){ st.textContent=best.checked===false? "The voltage and resistance on the photo didn't add up, so nothing was filled in. Type the numbers, or retake the photo straight on." : "No readings found in that photo. Type the numbers in, or retake it straight on with the screen filling the frame."; return; }
+    const unsure=best.beak && best.checked!==true && (v!=null||r!=null);   /* the Beak's screen, but its numbers couldn't be checked against each other */
+    if(best.checked===false || unsure){ v=null; r=null; }   /* don't fill in a number that may be misread */
+    if(v==null&&p==null&&r==null){ st.textContent=best.checked===false? "The voltage and resistance on the photo didn't add up, so nothing was filled in. Type the numbers, or retake the photo straight on." : unsure? "Some of the Beak's numbers couldn't be read, so they couldn't be double-checked and weren't filled in. Type them, or retake the photo with the screen filling the frame (or use Scan battery)." : "No readings found in that photo. Type the numbers in, or retake it straight on with the screen filling the frame."; return; }
     if(v!=null) el.querySelector("#bl-v").value=v.toFixed(2);
     if(p!=null) el.querySelector("#bl-pct").value=String(Math.round(p));
     if(r!=null) el.querySelector("#bl-ir").value=r.toFixed(3);
@@ -4269,9 +4274,112 @@ async function readBeakPhoto(file,el,sync){
     sync&&sync();
     const miss=[v==null&&"voltage",p==null&&"charge",r==null&&"internal resistance"].filter(Boolean);
     st.textContent = best.checked===false? `The voltage and resistance on the photo didn't add up, so they weren't filled in. Type them, or retake the photo straight on.${p!=null?" Check the charge before saving.":""}`
+      : unsure? `The voltage and resistance couldn't be double-checked, so they weren't filled in. Type them, or retake the photo with the screen filling the frame.${p!=null?" Check the charge before saving.":""}`
       : miss.length? `Filled in what it could read. Type the ${miss.join(" and ")}, and check every number before saving.`
       : best.checked? "Filled in from the photo; the Beak's readings agree with each other. Check them before saving." : "Filled in from the photo. Check every number before saving.";
   }catch(e){ console.warn("beak photo",e); st.textContent="That photo couldn't be read. Type the numbers instead."; }
+}
+/* ---- Scan a battery with the camera: its QR label, then the Battery Beak's screen, then log the check ----
+   Same full-screen camera as checklist scanning. The Beak is read from the box on screen, frame after frame, until its readings
+   check out (Rint = (V1 - V2) / 17) and two reads in a row agree; then the log sheet opens filled in. */
+const bs={};
+function batScan(){
+  if(!batsSorted().some(b=>!b.retired)){ toast("Add a battery first."); batEditSheet(); return; }
+  const pol=document.permissionsPolicy||document.featurePolicy;
+  if(!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia) || (pol&&pol.allowsFeature&&!pol.allowsFeature("camera"))){ toast("The camera isn't available here. Type the numbers instead."); batLogSheet(); return; }
+  Object.assign(bs,{step:"qr", bid:null, stream:null, timer:0, busy:false, closed:false, decode:null, reads:[], tries:0, since:0, tessFail:0});
+  const root=document.createElement("div"); root.id="bs-root"; root.className="qs"; root.setAttribute("role","dialog"); root.setAttribute("aria-modal","true"); root.setAttribute("aria-label","Scan a battery");
+  root.innerHTML=`<div class="qs-top"><button class="iconbtn" data-b="close" aria-label="Cancel battery scan">${ICON.x}</button>
+      <div class="qs-for"><span class="eyebrow">Battery check</span><b id="bs-label">Scan the battery's label</b></div></div>
+    <div class="qs-stage"><video id="bs-v" playsinline muted autoplay></video><div class="qs-frame" id="bs-qrbox" aria-hidden="true"></div><div class="bs-box" id="bs-box" aria-hidden="true" hidden></div><div class="qs-flash" id="bs-flash"></div>
+      <div class="qs-msg" id="bs-msg" aria-live="polite">Starting camera…</div></div>
+    <div class="qs-bottom"><div class="qs-acts"><button class="btn" data-b="skip" id="bs-skip">No label: skip</button><button class="btn" data-b="type">Type the numbers instead</button></div></div>`;
+  document.body.appendChild(root); document.body.classList.add("locked");
+  root.addEventListener("click",e=>{ const b=e.target.closest("[data-b]"); if(!b) return; const a=b.dataset.b;
+    if(a==="close") bsClose(); else if(a==="type"){ const id=bs.bid; bsClose(); batLogSheet(id); } else if(a==="skip") bsBeakStep(); });
+  bs.esc=e=>{ if(e.key==="Escape" && $("#sheet-root").hidden) bsClose(); }; document.addEventListener("keydown",bs.esc);
+  loadQrDecoder().then(d=>{ bs.decode=d; }).catch(()=>{ bsMsg("The label reader didn't load. Tap “No label: skip” and pick the battery in the form."); });
+  loadTess().catch(()=>{});   /* start the Beak reader downloading now */
+  bsStartCamera();
+}
+const bsMsg=t=>{ const m=$("#bs-msg"); if(m && m.textContent!==t) m.textContent=t; };
+function bsFlash(){ const f=$("#bs-flash"); if(f){ f.classList.remove("go"); void f.offsetWidth; f.classList.add("go"); } try{ if(navigator.vibrate) navigator.vibrate(60); }catch(e){} }
+async function bsStartCamera(){
+  try{ bs.stream=await Promise.race([navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:"environment"},width:{ideal:1920},height:{ideal:1080}}}),
+      new Promise((_,rej)=>setTimeout(()=>rej(new Error("timeout")),6000))]); }
+  catch(e){ const id=bs.bid; bsClose(); toast("The camera couldn't start. Type the numbers instead."); batLogSheet(id); return; }
+  if(bs.closed){ bs.stream.getTracks().forEach(t=>t.stop()); return; }
+  const v=$("#bs-v"); v.srcObject=bs.stream; try{ await v.play(); }catch(e){}
+  try{ await bs.stream.getVideoTracks()[0].applyConstraints({advanced:[{focusMode:"continuous"}]}); }catch(e){}
+  bsMsg("Show the battery's QR label");
+  bs.timer=setInterval(bsTick,200);
+}
+function bsClose(){
+  if(bs.closed) return; bs.closed=true; clearInterval(bs.timer);
+  if(bs.stream) bs.stream.getTracks().forEach(t=>t.stop()); bs.stream=null;
+  if(bs.esc) document.removeEventListener("keydown",bs.esc);
+  const r=$("#bs-root"); if(r) r.remove(); if($("#sheet-root").hidden) document.body.classList.remove("locked");
+}
+function bsBeakStep(){
+  bs.step="beak"; bs.reads=[]; bs.tries=0; bs.since=Date.now();
+  const b=bs.bid&&S.batteries[bs.bid];
+  $("#bs-label").textContent=b? `Battery ${b.label}` : "Battery (pick it in the form)";
+  $("#bs-qrbox").hidden=true; $("#bs-box").hidden=false; $("#bs-skip").hidden=true;
+  bsMsg("Now fit the Battery Beak's screen in the box");
+}
+/* the part of the video inside an on-screen box (the video is shown whole, letterboxed) */
+function bsGrab(v,box,width){
+  const st=v.getBoundingClientRect(), bx=box.getBoundingClientRect(), vw=v.videoWidth, vh=v.videoHeight, k=Math.min(st.width/vw, st.height/vh);
+  const ox=st.left+(st.width-vw*k)/2, oy=st.top+(st.height-vh*k)/2;
+  const sx=Math.max(0,(bx.left-ox)/k), sy=Math.max(0,(bx.top-oy)/k), sw=Math.min(vw-sx,bx.width/k), sh=Math.min(vh-sy,bx.height/k);
+  if(sw<20||sh<10) return null;
+  const sc=width/sw, c=document.createElement("canvas"); c.width=Math.round(sw*sc); c.height=Math.round(sh*sc);
+  const x=c.getContext("2d",{willReadFrequently:true}); x.imageSmoothingQuality="high"; x.drawImage(v,sx,sy,sw,sh,0,0,c.width,c.height); return c;
+}
+/* The Beak's screen, ready to read: its coloured text by its brightest channel, dark text on white, full contrast. */
+function beakScreenPrep(c){
+  const x=c.getContext("2d",{willReadFrequently:true}), id=x.getImageData(0,0,c.width,c.height), d=id.data, n=d.length/4, hist=new Uint32Array(256);
+  for(let i=0;i<d.length;i+=4){ const g=Math.max(d[i],d[i+1],d[i+2]); d[i]=g; hist[g]++; }
+  let lo=0, hi=255, acc=0; while(lo<255 && (acc+=hist[lo])<n*0.05) lo++; acc=0; while(hi>0 && (acc+=hist[hi])<n*0.01) hi--;
+  const k=255/Math.max(1,hi-lo); for(let i=0;i<d.length;i+=4){ const g=255-Math.max(0,Math.min(255,(d[i]-lo)*k)); d[i]=d[i+1]=d[i+2]=g; }
+  x.putImageData(id,0,0); return c;
+}
+async function bsTick(){
+  const v=$("#bs-v"); if(bs.closed || !v || v.readyState<2 || !v.videoWidth || bs.busy) return;
+  bs.busy=true;
+  try{
+    if(bs.step==="qr"){
+      if(!bs.decode) return;
+      const w=Math.min(1280,v.videoWidth), h=Math.round(w*v.videoHeight/v.videoWidth), c=bs.qc||(bs.qc=document.createElement("canvas"));
+      if(c.width!==w||c.height!==h){ c.width=w; c.height=h; } c.getContext("2d",{willReadFrequently:true}).drawImage(v,0,0,w,h);
+      const hits=await bs.decode(c); if(bs.closed) return;
+      const t=hits.map(x=>String(x.t||"")).find(x=>/#b-[A-Za-z0-9_-]+\s*$/.test(x));
+      if(!t){ bsMsg(hits.length?"That QR code isn't a battery label":"Show the battery's QR label"); return; }
+      const id=t.match(/#b-([A-Za-z0-9_-]+)\s*$/)[1], b=S.batteries[id];
+      if(!b){ bsMsg("That label is for a battery this board doesn't have"); return; }
+      if(b.retired){ bsMsg(`Battery ${b.label} is retired. Show another label`); return; }
+      bs.bid=id; bsFlash(); bsBeakStep(); return;
+    }
+    if(bs.tessFail && Date.now()-bs.tessFail<10000) return;   /* offline: try the download again every 10 s, not every frame */
+    let w; try{ w=await loadTess(); bs.tessFail=0; }catch(e){ bs.tessFail=Date.now(); bsMsg("The Beak reader needs internet the first time (about 6 MB). Tap “Type the numbers instead”."); return; }
+    const c=bsGrab(v,$("#bs-box"),[1000,1200,850][bs.tries%3]); if(!c || bs.closed) return;   /* a slightly different size each time: a misread on one frame often isn't on the next */
+    beakScreenPrep(c); await w.setParameters({tessedit_pageseg_mode:"6"});
+    const out=await w.recognize(c,{},{text:true,blocks:true}); if(bs.closed || bs.step!=="beak") return;
+    const o=beakParse(beakText(c,out&&out.data)); bs.tries++;
+    if(o.checked===true && o.v!=null && o.r!=null){
+      const prev=bs.reads[bs.reads.length-1]; bs.reads.push(o); $("#bs-box").classList.add("good");
+      const same=prev && Math.abs(prev.v-o.v)<0.002 && Math.abs(prev.r-o.r)<0.0005;   /* two reads in a row agree */
+      const ps=bs.reads.map(x=>x.p).filter(x=>x!=null), p=ps.find((x,i)=>ps.indexOf(x)!==i);   /* the charge isn't cross-checked: it must read the same twice */
+      if(same && (p!=null || bs.reads.length>=4)){ const id=bs.bid; bsFlash(); bsClose();
+        const x=id&&batInfo(S.batteries[id]), nm=nextMatch(), kind=x&&x.last&&x.last.kind==="pre"?"post":(nm?"pre":"charged");
+        batLogSheet(id, kind, null, {v:o.v, p:p==null?null:p, r:o.r}); return; }
+      bsMsg("Got it. Hold still…"); return;
+    }
+    $("#bs-box").classList.remove("good");
+    const seen=o.v!=null||o.r!=null||o.p!=null;
+    bsMsg(o.checked===false? "The numbers don't add up yet. Hold steady, straight on" : seen? "Reading… hold the screen steady in the box" : Date.now()-bs.since>6000? "Move closer so the Beak's screen fills the box" : "Fit the Battery Beak's screen in the box");
+  }catch(e){ console.warn("battery scan",e); }
+  finally{ bs.busy=false; }
 }
 /* Why a battery shouldn't run match m, or "" if it's fine. Used by the pick sheet to ask before assigning. */
 function batUseWarning(b,m){
@@ -4710,6 +4818,7 @@ document.addEventListener("click", async e=>{
     case "bat-new": batEditSheet(); break;
     case "bat-open": batDetail(id); break;
     case "bat-log": batLogSheet(id||null, b.dataset.kind||null, b.dataset.match||null); break;
+    case "bat-scan": batScan(); break;
     case "bat-assign": if(b.dataset.match) assignBattery(b.dataset.match,id); break;
     case "bat-pick": batPickSheet(b.dataset.match); break;
     case "bat-cfg": batCfgSheet(); break;
