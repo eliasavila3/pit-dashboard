@@ -1,1 +1,1483 @@
-{"uid": "u__Jp2sRdRR5XhTrIp3kqLkg", "who": "", "code": "R3CK", "game": "", "name": "Robot Checklist", "year": 2026, "version": 3, "sections": [{"id": "r26s1", "name": "Pre-Match", "items": [{"id": "r26s1i1", "mode": "both", "text": "Laptop is CHARGED", "type": "check", "priority": false}, {"id": "r26s1i2", "mode": "both", "text": "Controllers CONNECTED PROPERLY", "type": "check", "priority": false}, {"id": "r26s1i4", "mode": "both", "text": "CORRECT Bumpers for match", "type": "check", "priority": false}, {"id": "r26s1i5", "mode": "both", "text": "Bumper nuts are SECURE", "type": "check", "priority": false}, {"id": "r26s1i6", "mode": "both", "text": "NEW battery (>12V) & Spare battery in Cart", "type": "check", "priority": false}, {"id": "r26s1i7", "mode": "both", "text": "Battery connector ZIPTIED (with large ziptie)", "type": "check", "priority": false}, {"id": "r26s1i8", "mode": "both", "text": "Battery LABELED for match", "type": "check", "priority": false}, {"id": "r26s1i9", "mode": "both", "text": "All ethernet cables CONNECTED", "type": "check", "priority": false}, {"id": "r26s1i10", "mode": "both", "text": "All bolts for panels INSTALLED", "type": "check", "priority": false}, {"id": "r26s1i11", "mode": "both", "text": "Swerve wheels rotated with BEVEL GEARS facing out", "type": "check", "priority": false}], "assignee": "Eli"}, {"id": "r26s2", "name": "Power On (Pre Enable)", "items": [{"id": "r26s2i1", "mode": "paper", "text": "All motors ON", "type": "check", "priority": false}, {"id": "r26s2i2", "mode": "paper", "text": "All LEDs flashing ORANGE", "type": "sub", "priority": false}, {"id": "r26s2i3", "mode": "paper", "text": "CANivore ON", "type": "check", "priority": false}, {"id": "r26s2i4", "mode": "paper", "text": "Pigeon ON", "type": "check", "priority": false}, {"id": "r26s2i5", "mode": "paper", "text": "Roborio ON", "type": "check", "priority": false}, {"id": "r26s2i6", "mode": "paper", "text": "All Limelights ON", "type": "check", "priority": false}, {"id": "r26s2i7", "mode": "paper", "text": "Radio ON", "type": "check", "priority": false}, {"id": "r26s2i8", "mode": "paper", "text": "All CANcoders ON", "type": "check", "priority": false}, {"id": "r26s2i9", "mode": "paper", "text": "Lights are green", "type": "sub", "priority": false}], "assignee": "Eli"}, {"id": "r26s3", "name": "Power On (Enable)", "items": [{"id": "r26s3i1", "mode": "paper", "text": "All motors ON", "type": "check", "priority": false}, {"id": "r26s3i2", "mode": "paper", "text": "All LEDs solid ORANGE", "type": "sub", "priority": false}, {"id": "r26s3i3", "mode": "paper", "text": "Limelights are CONNECTED", "type": "check", "priority": false}, {"id": "r26s3i4", "mode": "paper", "text": "Limelights reading CORRECTLY", "type": "check", "priority": false}], "assignee": "Eli"}, {"id": "r26s4", "name": "Swerve", "items": [{"id": "r26s4i1", "mode": "paper", "text": "COOL all motors", "type": "check", "priority": false}, {"id": "r26s4i2", "mode": "paper", "text": "All motor bolts are TIGHT", "type": "check", "priority": false}, {"id": "r26s4i3", "mode": "paper", "text": "Krakens not DAMAGED", "type": "check", "priority": false}, {"id": "r26s4i4", "mode": "paper", "text": "Pinions are INSTALLED", "type": "check", "priority": false}, {"id": "r26s4i5", "mode": "paper", "text": "Pinion retention screws NOT LOOSE", "type": "check", "priority": false}, {"id": "r26s4i6", "mode": "paper", "text": "Module and wheel rotation SMOOTH", "type": "check", "priority": false}, {"id": "r26s4i7", "mode": "paper", "text": "Bolts for mounting module are TIGHT", "type": "check", "priority": false}, {"id": "r26s4i8", "mode": "paper", "text": "Bolts holding in large bearing are TIGHT", "type": "check", "priority": false}, {"id": "r26s4i9", "mode": "paper", "text": "Fork bolts are TIGHT and forks NOT BENT", "type": "check", "priority": false}, {"id": "r26s4i10", "mode": "paper", "text": "CHECK snap rings", "type": "check", "priority": false}, {"id": "r26s4i11", "mode": "paper", "text": "CHECK for busted bearings", "type": "check", "priority": false}, {"id": "r26s4i12", "mode": "paper", "text": "Gears aren't WORN DOWN", "type": "check", "priority": false}, {"id": "r26s4i13", "mode": "paper", "text": "All gears GREASED", "type": "check", "priority": false}, {"id": "r26s4i14", "mode": "paper", "text": "Screw for central spindle IS IN", "type": "check", "priority": false}, {"id": "r26s4i15", "mode": "paper", "text": "Bevel gears AREN'T WORN DOWN", "type": "check", "priority": false}, {"id": "r26s4i16", "mode": "paper", "text": "Tread is in GOOD CONDITION", "type": "check", "priority": false}, {"id": "r26s4i17", "mode": "paper", "text": "All power poles are PLUGGED IN (and ZIPTIED)", "type": "check", "priority": false}, {"id": "r26s4i18", "mode": "paper", "text": "No wires are LOOSE", "type": "check", "priority": false}, {"id": "r26s4i19", "mode": "paper", "text": "CAN wire connections ARE IN", "type": "check", "priority": false}, {"id": "r26s4i20", "mode": "paper", "text": "Wires soldered onto sensor board SECURELY", "type": "check", "priority": false}], "assignee": "Briana"}, {"id": "r26s5", "name": "Drivetrain", "items": [{"id": "r26s5i1", "mode": "paper", "text": "Bolts into tube plugs ARE TIGHT", "type": "check", "priority": false}, {"id": "r26s5i2", "mode": "paper", "text": "Bottom corner plate NOT BENT", "type": "check", "priority": false}, {"id": "r26s5i3", "mode": "paper", "text": "2x2 Tubes NOT DENTED", "type": "check", "priority": false}, {"id": "r26s5i4", "mode": "paper", "text": "Bellypan NOT BENT", "type": "check", "priority": false}, {"id": "r26s5i5", "mode": "paper", "text": "Center 2x1 Support Tubes NOT BENT", "type": "check", "priority": false}, {"id": "r26s5i6", "mode": "paper", "text": "Corner plates SECURED", "type": "check", "priority": false}, {"id": "r26s5i7", "mode": "paper", "text": "CF Support Tubes NOT CRACKED", "type": "check", "priority": false}, {"id": "r26s5i8", "mode": "paper", "text": "Hanger support plates not BENT", "type": "check", "priority": false}], "assignee": "Briana"}, {"id": "r26s6", "name": "Electronics", "items": [{"id": "r26s6i1", "mode": "paper", "text": "Radio power SECURE", "type": "check", "priority": false}, {"id": "r26s6i2", "mode": "paper", "text": "Rio power SECURE", "type": "check", "priority": false}, {"id": "r26s6i3", "mode": "paper", "text": "All Ethernet cables SECURE", "type": "check", "priority": false}, {"id": "r26s6i4", "mode": "paper", "text": "Main power connection NOT LOOSE", "type": "check", "priority": false}, {"id": "r26s6i5", "mode": "paper", "text": "All power poles are IN and SECURE", "type": "check", "priority": false}, {"id": "r26s6i6", "mode": "paper", "text": "All fuses are FULLY IN", "type": "check", "priority": false}, {"id": "r26s6i7", "mode": "paper", "text": "POWER to CANivore", "type": "check", "priority": false}, {"id": "r26s6i8", "mode": "paper", "text": "USB to CANivore", "type": "check", "priority": false}, {"id": "r26s6i9", "mode": "paper", "text": "POWER to Pigeon", "type": "check", "priority": false}, {"id": "r26s6i10", "mode": "paper", "text": "POWER to Mini Power Module", "type": "check", "priority": false}, {"id": "r26s6i11", "mode": "paper", "text": "POWER to VRM", "type": "check", "priority": false}, {"id": "r26s6i12", "mode": "paper", "text": "POWER to LimeLights", "type": "check", "priority": false}, {"id": "r26s6i13", "mode": "paper", "text": "POWER to CANdle", "type": "check", "priority": false}, {"id": "r26s6i14", "mode": "paper", "text": "All wires PLUGGED IN to Limelights", "type": "check", "priority": false}, {"id": "r26s6i15", "mode": "paper", "text": "CAN connections NOT BUSTED", "type": "check", "priority": false}], "assignee": "Briana"}, {"id": "r26s7", "name": "Intake", "items": [{"id": "r26s7i1", "mode": "paper", "text": "COOL all motors", "type": "check", "priority": false}, {"id": "r26s7i2", "mode": "paper", "text": "All motor bolts are TIGHT", "type": "check", "priority": false}, {"id": "r26s7i3", "mode": "paper", "text": "Krakens not DAMAGED", "type": "check", "priority": false}, {"id": "r26s7i4", "mode": "paper", "text": "Pinions are INSTALLED", "type": "check", "priority": false}, {"id": "r26s7i5", "mode": "paper", "text": "Pinion retention screws NOT LOOSE", "type": "check", "priority": false}, {"id": "r26s7i6", "mode": "paper", "text": "All bolts are SECURED", "type": "check", "priority": false}, {"id": "r26s7i7", "mode": "paper", "text": "Gears aren't WORN DOWN", "type": "check", "priority": false}, {"id": "r26s7i8", "mode": "paper", "text": "All gears GREASED", "type": "check", "priority": false}, {"id": "r26s7i9", "mode": "paper", "text": "All wire connections NOT LOOSE", "type": "check", "priority": false}, {"id": "r26s7i10", "mode": "paper", "text": "Bearings are ALL IN", "type": "check", "priority": false}, {"id": "r26s7i11", "mode": "paper", "text": "Bearings not BUSTED", "type": "check", "priority": false}, {"id": "r26s7i12", "mode": "paper", "text": "Snap rings are SECURE", "type": "check", "priority": false}, {"id": "r26s7i13", "mode": "paper", "text": "Wires NOT DAMAGED", "type": "check", "priority": false}, {"id": "r26s7i14", "mode": "paper", "text": "Cat Tongue NOT RIPPED", "type": "check", "priority": false}, {"id": "r26s7i15", "mode": "paper", "text": "Printed pulleys NOT STRIPPED or DAMAGED", "type": "check", "priority": false}, {"id": "r26s7i16", "mode": "paper", "text": "Printed parts NOT DAMAGED", "type": "check", "priority": false}, {"id": "r26s7i17", "mode": "paper", "text": "Roller Tubes NOT DAMAGED", "type": "check", "priority": false}, {"id": "r26s7i18", "mode": "paper", "text": "Belts INTACT", "type": "check", "priority": false}, {"id": "r26s7i19", "mode": "paper", "text": "Rollers SPIN SMOOTHLY", "type": "check", "priority": false}, {"id": "r26s7i20", "mode": "paper", "text": "Kicker tubes NOT BENT", "type": "check", "priority": false}, {"id": "r26s7i21", "mode": "paper", "text": "CF Tubes NOT CRACKED", "type": "check", "priority": false}, {"id": "r26s7i22", "mode": "paper", "text": "SRPP plates NOT DAMAGED", "type": "check", "priority": false}, {"id": "r26s7i23", "mode": "paper", "text": "Aluminum washers NOT BENT", "type": "check", "priority": false}, {"...
+{
+	"uid": "u__Jp2sRdRR5XhTrIp3kqLkg",
+	"who": "",
+	"code": "R3CK",
+	"game": "",
+	"name": "Robot Checklist",
+	"year": 2026,
+	"version": 3,
+	"sections": [
+		{
+			"id": "r26s1",
+			"name": "Pre-Match",
+			"items": [
+				{
+					"id": "r26s1i1",
+					"mode": "both",
+					"text": "Laptop is CHARGED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s1i2",
+					"mode": "both",
+					"text": "Controllers CONNECTED PROPERLY",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s1i4",
+					"mode": "both",
+					"text": "CORRECT Bumpers for match",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s1i5",
+					"mode": "both",
+					"text": "Bumper nuts are SECURE",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s1i6",
+					"mode": "both",
+					"text": "NEW battery (>12V) & Spare battery in Cart",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s1i7",
+					"mode": "both",
+					"text": "Battery connector ZIPTIED (with large ziptie)",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s1i8",
+					"mode": "both",
+					"text": "Battery LABELED for match",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s1i9",
+					"mode": "both",
+					"text": "All ethernet cables CONNECTED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s1i10",
+					"mode": "both",
+					"text": "All bolts for panels INSTALLED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s1i11",
+					"mode": "both",
+					"text": "Swerve wheels rotated with BEVEL GEARS facing out",
+					"type": "check",
+					"priority": false
+				}
+			],
+			"assignee": "Eli"
+		},
+		{
+			"id": "r26s2",
+			"name": "Power On (Pre Enable)",
+			"items": [
+				{
+					"id": "r26s2i1",
+					"mode": "paper",
+					"text": "All motors ON",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s2i2",
+					"mode": "paper",
+					"text": "All LEDs flashing ORANGE",
+					"type": "sub",
+					"priority": false
+				},
+				{
+					"id": "r26s2i3",
+					"mode": "paper",
+					"text": "CANivore ON",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s2i4",
+					"mode": "paper",
+					"text": "Pigeon ON",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s2i5",
+					"mode": "paper",
+					"text": "Roborio ON",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s2i6",
+					"mode": "paper",
+					"text": "All Limelights ON",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s2i7",
+					"mode": "paper",
+					"text": "Radio ON",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s2i8",
+					"mode": "paper",
+					"text": "All CANcoders ON",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s2i9",
+					"mode": "paper",
+					"text": "Lights are green",
+					"type": "sub",
+					"priority": false
+				}
+			],
+			"assignee": "Eli"
+		},
+		{
+			"id": "r26s3",
+			"name": "Power On (Enable)",
+			"items": [
+				{
+					"id": "r26s3i1",
+					"mode": "paper",
+					"text": "All motors ON",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s3i2",
+					"mode": "paper",
+					"text": "All LEDs solid ORANGE",
+					"type": "sub",
+					"priority": false
+				},
+				{
+					"id": "r26s3i3",
+					"mode": "paper",
+					"text": "Limelights are CONNECTED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s3i4",
+					"mode": "paper",
+					"text": "Limelights reading CORRECTLY",
+					"type": "check",
+					"priority": false
+				}
+			],
+			"assignee": "Eli"
+		},
+		{
+			"id": "r26s4",
+			"name": "Swerve",
+			"items": [
+				{
+					"id": "r26s4i1",
+					"mode": "paper",
+					"text": "COOL all motors",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s4i2",
+					"mode": "paper",
+					"text": "All motor bolts are TIGHT",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s4i3",
+					"mode": "paper",
+					"text": "Krakens not DAMAGED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s4i4",
+					"mode": "paper",
+					"text": "Pinions are INSTALLED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s4i5",
+					"mode": "paper",
+					"text": "Pinion retention screws NOT LOOSE",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s4i6",
+					"mode": "paper",
+					"text": "Module and wheel rotation SMOOTH",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s4i7",
+					"mode": "paper",
+					"text": "Bolts for mounting module are TIGHT",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s4i8",
+					"mode": "paper",
+					"text": "Bolts holding in large bearing are TIGHT",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s4i9",
+					"mode": "paper",
+					"text": "Fork bolts are TIGHT and forks NOT BENT",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s4i10",
+					"mode": "paper",
+					"text": "CHECK snap rings",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s4i11",
+					"mode": "paper",
+					"text": "CHECK for busted bearings",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s4i12",
+					"mode": "paper",
+					"text": "Gears aren't WORN DOWN",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s4i13",
+					"mode": "paper",
+					"text": "All gears GREASED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s4i14",
+					"mode": "paper",
+					"text": "Screw for central spindle IS IN",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s4i15",
+					"mode": "paper",
+					"text": "Bevel gears AREN'T WORN DOWN",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s4i16",
+					"mode": "paper",
+					"text": "Tread is in GOOD CONDITION",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s4i17",
+					"mode": "paper",
+					"text": "All power poles are PLUGGED IN (and ZIPTIED)",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s4i18",
+					"mode": "paper",
+					"text": "No wires are LOOSE",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s4i19",
+					"mode": "paper",
+					"text": "CAN wire connections ARE IN",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s4i20",
+					"mode": "paper",
+					"text": "Wires soldered onto sensor board SECURELY",
+					"type": "check",
+					"priority": false
+				}
+			],
+			"assignee": "Briana"
+		},
+		{
+			"id": "r26s5",
+			"name": "Drivetrain",
+			"items": [
+				{
+					"id": "r26s5i1",
+					"mode": "paper",
+					"text": "Bolts into tube plugs ARE TIGHT",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s5i2",
+					"mode": "paper",
+					"text": "Bottom corner plate NOT BENT",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s5i3",
+					"mode": "paper",
+					"text": "2x2 Tubes NOT DENTED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s5i4",
+					"mode": "paper",
+					"text": "Bellypan NOT BENT",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s5i5",
+					"mode": "paper",
+					"text": "Center 2x1 Support Tubes NOT BENT",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s5i6",
+					"mode": "paper",
+					"text": "Corner plates SECURED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s5i7",
+					"mode": "paper",
+					"text": "CF Support Tubes NOT CRACKED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s5i8",
+					"mode": "paper",
+					"text": "Hanger support plates not BENT",
+					"type": "check",
+					"priority": false
+				}
+			],
+			"assignee": "Briana"
+		},
+		{
+			"id": "r26s6",
+			"name": "Electronics",
+			"items": [
+				{
+					"id": "r26s6i1",
+					"mode": "paper",
+					"text": "Radio power SECURE",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s6i2",
+					"mode": "paper",
+					"text": "Rio power SECURE",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s6i3",
+					"mode": "paper",
+					"text": "All Ethernet cables SECURE",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s6i4",
+					"mode": "paper",
+					"text": "Main power connection NOT LOOSE",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s6i5",
+					"mode": "paper",
+					"text": "All power poles are IN and SECURE",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s6i6",
+					"mode": "paper",
+					"text": "All fuses are FULLY IN",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s6i7",
+					"mode": "paper",
+					"text": "POWER to CANivore",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s6i8",
+					"mode": "paper",
+					"text": "USB to CANivore",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s6i9",
+					"mode": "paper",
+					"text": "POWER to Pigeon",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s6i10",
+					"mode": "paper",
+					"text": "POWER to Mini Power Module",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s6i11",
+					"mode": "paper",
+					"text": "POWER to VRM",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s6i12",
+					"mode": "paper",
+					"text": "POWER to LimeLights",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s6i13",
+					"mode": "paper",
+					"text": "POWER to CANdle",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s6i14",
+					"mode": "paper",
+					"text": "All wires PLUGGED IN to Limelights",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s6i15",
+					"mode": "paper",
+					"text": "CAN connections NOT BUSTED",
+					"type": "check",
+					"priority": false
+				}
+			],
+			"assignee": "Briana"
+		},
+		{
+			"id": "r26s7",
+			"name": "Intake",
+			"items": [
+				{
+					"id": "r26s7i1",
+					"mode": "paper",
+					"text": "COOL all motors",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s7i2",
+					"mode": "paper",
+					"text": "All motor bolts are TIGHT",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s7i3",
+					"mode": "paper",
+					"text": "Krakens not DAMAGED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s7i4",
+					"mode": "paper",
+					"text": "Pinions are INSTALLED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s7i5",
+					"mode": "paper",
+					"text": "Pinion retention screws NOT LOOSE",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s7i6",
+					"mode": "paper",
+					"text": "All bolts are SECURED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s7i7",
+					"mode": "paper",
+					"text": "Gears aren't WORN DOWN",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s7i8",
+					"mode": "paper",
+					"text": "All gears GREASED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s7i9",
+					"mode": "paper",
+					"text": "All wire connections NOT LOOSE",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s7i10",
+					"mode": "paper",
+					"text": "Bearings are ALL IN",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s7i11",
+					"mode": "paper",
+					"text": "Bearings not BUSTED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s7i12",
+					"mode": "paper",
+					"text": "Snap rings are SECURE",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s7i13",
+					"mode": "paper",
+					"text": "Wires NOT DAMAGED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s7i14",
+					"mode": "paper",
+					"text": "Cat Tongue NOT RIPPED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s7i15",
+					"mode": "paper",
+					"text": "Printed pulleys NOT STRIPPED or DAMAGED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s7i16",
+					"mode": "paper",
+					"text": "Printed parts NOT DAMAGED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s7i17",
+					"mode": "paper",
+					"text": "Roller Tubes NOT DAMAGED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s7i18",
+					"mode": "paper",
+					"text": "Belts INTACT",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s7i19",
+					"mode": "paper",
+					"text": "Rollers SPIN SMOOTHLY",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s7i20",
+					"mode": "paper",
+					"text": "Kicker tubes NOT BENT",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s7i21",
+					"mode": "paper",
+					"text": "CF Tubes NOT CRACKED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s7i22",
+					"mode": "paper",
+					"text": "SRPP plates NOT DAMAGED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s7i23",
+					"mode": "paper",
+					"text": "Aluminum washers NOT BENT",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s7i24",
+					"mode": "paper",
+					"text": "Crush tube NOT BENT",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s7i25",
+					"mode": "paper",
+					"text": "Front pocketed panel SECURED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s7i26",
+					"mode": "paper",
+					"text": "All panels NOT DAMAGED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s7i27",
+					"mode": "paper",
+					"text": "Aluminum pivot plates NOT BENT",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s7i28",
+					"mode": "paper",
+					"text": "Chain is TENSIONED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s7i29",
+					"mode": "paper",
+					"text": "Sprocket NOT BENT",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s7i30",
+					"mode": "paper",
+					"text": "Intake moves in/out SMOOTHLY",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s7i31",
+					"mode": "paper",
+					"text": "Intake FULLY STOWS",
+					"type": "check",
+					"priority": false
+				}
+			],
+			"assignee": "Ian"
+		},
+		{
+			"id": "r26s8",
+			"name": "Bowl",
+			"items": [
+				{
+					"id": "r26s8i1",
+					"mode": "paper",
+					"text": "COOL all motors",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s8i2",
+					"mode": "paper",
+					"text": "All motor bolts are TIGHT",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s8i3",
+					"mode": "paper",
+					"text": "Krakens not DAMAGED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s8i4",
+					"mode": "paper",
+					"text": "Pinions are INSTALLED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s8i5",
+					"mode": "paper",
+					"text": "Pinion retention screws NOT LOOSE",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s8i6",
+					"mode": "paper",
+					"text": "All bolts are SECURED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s8i7",
+					"mode": "paper",
+					"text": "Gears aren't WORN DOWN",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s8i8",
+					"mode": "paper",
+					"text": "All gears GREASED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s8i9",
+					"mode": "paper",
+					"text": "Bearings are ALL IN",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s8i10",
+					"mode": "paper",
+					"text": "Snap rings are SECURE",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s8i11",
+					"mode": "paper",
+					"text": "All wire connections SECURE",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s8i12",
+					"mode": "paper",
+					"text": "Bearings NOT BUSTED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s8i13",
+					"mode": "paper",
+					"text": "All plate bearing blocks TIGHT",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s8i14",
+					"mode": "paper",
+					"text": "Shoulder bolts NOT LOOSE",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s8i15",
+					"mode": "paper",
+					"text": "Foam INTACT",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s8i16",
+					"mode": "paper",
+					"text": "Cat Tongue NOT RIPPED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s8i17",
+					"mode": "paper",
+					"text": "Zipties INTACT",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s8i18",
+					"mode": "paper",
+					"text": "Side walls NOT DAMAGED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s8i19",
+					"mode": "paper",
+					"text": "Printed parts NOT CRACKED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s8i20",
+					"mode": "paper",
+					"text": "Bowl floor NOT CRACKED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s8i21",
+					"mode": "paper",
+					"text": "Large main gear NOT DAMAGED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s8i22",
+					"mode": "paper",
+					"text": "Bowl spins SMOOTHLY",
+					"type": "check",
+					"priority": false
+				}
+			],
+			"assignee": "Ian"
+		},
+		{
+			"id": "r26s9",
+			"name": "Sweeper Arm",
+			"items": [
+				{
+					"id": "r26s9i1",
+					"mode": "paper",
+					"text": "COOL all motors",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s9i2",
+					"mode": "paper",
+					"text": "All motor bolts are TIGHT",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s9i3",
+					"mode": "paper",
+					"text": "Krakens not DAMAGED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s9i4",
+					"mode": "paper",
+					"text": "Pinions are INSTALLED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s9i5",
+					"mode": "paper",
+					"text": "Pinion retention screws NOT LOOSE",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s9i6",
+					"mode": "paper",
+					"text": "All bolts are SECURED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s9i7",
+					"mode": "paper",
+					"text": "Gears aren't WORN DOWN",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s9i8",
+					"mode": "paper",
+					"text": "All gears GREASED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s9i9",
+					"mode": "paper",
+					"text": "All wire connections NOT LOOSE",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s9i10",
+					"mode": "paper",
+					"text": "Bearings are ALL IN",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s9i11",
+					"mode": "paper",
+					"text": "Bearings not BUSTED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s9i12",
+					"mode": "paper",
+					"text": "Snap rings are SECURE",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s9i13",
+					"mode": "paper",
+					"text": "Wheels spin SMOOTHLY",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s9i14",
+					"mode": "paper",
+					"text": "Printed pulleys NOT DAMAGED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s9i15",
+					"mode": "paper",
+					"text": "PC plate NOT CRACKED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s9i16",
+					"mode": "paper",
+					"text": "Slick tape INTACT",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s9i17",
+					"mode": "paper",
+					"text": "Large bearing SECURE AND INTACT",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s9i18",
+					"mode": "paper",
+					"text": "Bevel gears NOT WORN DOWN",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s9i19",
+					"mode": "paper",
+					"text": "Printed idlers NOT DAMAGED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s9i20",
+					"mode": "paper",
+					"text": "Belts NOT LOOSE",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s9i21",
+					"mode": "paper",
+					"text": "All rollers spin SMOOTHLY",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s9i22",
+					"mode": "paper",
+					"text": "Sweeper arm spins SMOOTHLY",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s9i23",
+					"mode": "paper",
+					"text": "Printed bevel cover NOT DAMAGED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s9i24",
+					"mode": "paper",
+					"text": "Large main gear NOT DAMAGED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s9i25",
+					"mode": "paper",
+					"text": "Sweeper arm NOT BENT",
+					"type": "check",
+					"priority": false
+				}
+			],
+			"assignee": "Ricky"
+		},
+		{
+			"id": "r26s10",
+			"name": "Shooter",
+			"items": [
+				{
+					"id": "r26s10i1",
+					"mode": "paper",
+					"text": "COOL all motors",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s10i2",
+					"mode": "paper",
+					"text": "All motor bolts are TIGHT",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s10i3",
+					"mode": "paper",
+					"text": "Power poles SECURE (ziptied)",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s10i4",
+					"mode": "paper",
+					"text": "Krakens not DAMAGED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s10i5",
+					"mode": "paper",
+					"text": "Pinions are INSTALLED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s10i6",
+					"mode": "paper",
+					"text": "Pinion retention screws NOT LOOSE",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s10i7",
+					"mode": "paper",
+					"text": "All bolts are SECURED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s10i8",
+					"mode": "paper",
+					"text": "Gears aren't WORN DOWN",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s10i9",
+					"mode": "paper",
+					"text": "All gears GREASED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s10i10",
+					"mode": "paper",
+					"text": "All wire connections NOT LOOSE",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s10i11",
+					"mode": "paper",
+					"text": "Bearings not BUSTED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s10i12",
+					"mode": "paper",
+					"text": "Bearings are ALL IN",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s10i13",
+					"mode": "paper",
+					"text": "Snap rings are SECURE",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s10i14",
+					"mode": "paper",
+					"text": "Limelights NOT LOOSE",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s10i15",
+					"mode": "paper",
+					"text": "Printed parts NOT DAMAGED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s10i16",
+					"mode": "paper",
+					"text": "Belts NOT DAMAGED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s10i17",
+					"mode": "paper",
+					"text": "All wheels spin SMOOTHLY",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s10i18",
+					"mode": "paper",
+					"text": "Printed pulleys NOT DAMAGED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s10i19",
+					"mode": "paper",
+					"text": "Hood plates NOT BENT",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s10i20",
+					"mode": "paper",
+					"text": "Hood moves SMOOTHLY",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s10i21",
+					"mode": "paper",
+					"text": "Hardstops NOT BENT",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s10i22",
+					"mode": "paper",
+					"text": "Wheels NOT DAMAGED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s10i23",
+					"mode": "paper",
+					"text": "Wheels NOT WORN DOWN",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s10i24",
+					"mode": "paper",
+					"text": "Slick tape INTACT",
+					"type": "check",
+					"priority": false
+				}
+			],
+			"assignee": "Ricky"
+		},
+		{
+			"id": "r26s11",
+			"name": "Turret",
+			"items": [
+				{
+					"id": "r26s11i1",
+					"mode": "paper",
+					"text": "COOL all motors",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s11i2",
+					"mode": "paper",
+					"text": "All motor bolts are TIGHT",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s11i3",
+					"mode": "paper",
+					"text": "Krakens not DAMAGED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s11i4",
+					"mode": "paper",
+					"text": "Pinions are INSTALLED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s11i5",
+					"mode": "paper",
+					"text": "Pinion retention screws NOT LOOSE",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s11i6",
+					"mode": "paper",
+					"text": "All bolts are SECURED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s11i7",
+					"mode": "paper",
+					"text": "Gears aren't WORN DOWN",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s11i8",
+					"mode": "paper",
+					"text": "All wire connections NOT LOOSE",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s11i9",
+					"mode": "paper",
+					"text": "Bearings are ALL IN",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s11i10",
+					"mode": "paper",
+					"text": "Bearings not BUSTED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s11i11",
+					"mode": "paper",
+					"text": "Snap rings are SECURE",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s11i12",
+					"mode": "paper",
+					"text": "All gears GREASED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s11i13",
+					"mode": "paper",
+					"text": "Belts INTACT",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s11i14",
+					"mode": "paper",
+					"text": "Printed parts NOT DAMAGED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s11i15",
+					"mode": "paper",
+					"text": "Main turret gear NOT DAMAGED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s11i16",
+					"mode": "paper",
+					"text": "Bigus gears NOT DAMAGED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s11i17",
+					"mode": "paper",
+					"text": "Encoder gears NOT DAMAGED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s11i18",
+					"mode": "paper",
+					"text": "Printed pulleys NOT DAMAGED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s11i19",
+					"mode": "paper",
+					"text": "Turret spins SMOOTHLY",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s11i20",
+					"mode": "paper",
+					"text": "Bigus guides NOT BENT",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s11i21",
+					"mode": "paper",
+					"text": "Bigus NOT DAMAGED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s11i22",
+					"mode": "paper",
+					"text": "Turret deck NOT BENT",
+					"type": "check",
+					"priority": false
+				}
+			],
+			"assignee": "Areli"
+		},
+		{
+			"id": "r26s12",
+			"name": "Hopper",
+			"items": [
+				{
+					"id": "r26s12i1",
+					"mode": "paper",
+					"text": "All bolts are SECURED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s12i2",
+					"mode": "paper",
+					"text": "Panels NOT CRACKED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s12i3",
+					"mode": "paper",
+					"text": "AL plates NOT BENT",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s12i4",
+					"mode": "paper",
+					"text": "Velcro SECURED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s12i5",
+					"mode": "paper",
+					"text": "Printed parts NOT CRACKED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s12i6",
+					"mode": "paper",
+					"text": "Printed parts SECURED",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s12i7",
+					"mode": "paper",
+					"text": "Slick tape INTACT",
+					"type": "check",
+					"priority": false
+				},
+				{
+					"id": "r26s12i8",
+					"mode": "paper",
+					"text": "Zipties INTACT",
+					"type": "check",
+					"priority": false
+				}
+			],
+			"assignee": "Areli"
+		}
+	],
+	"createdAt": 1792574868672,
+	"updatedAt": 1793060853897
+}
