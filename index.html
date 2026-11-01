@@ -4225,7 +4225,7 @@ function beakParse(text){
     if(x>=4 && x<=16 && [0,1,18].includes(a) && at[a]==null) at[a]=x; }
   if(at[0]==null && (m=/[VU][0O]\W{0,2}(\d{1,2}\.\d{1,3})/.exec(t)) && num(m[1])>=4 && num(m[1])<=16) at[0]=num(m[1]);
   const beak=Object.keys(at).length>0; if(at[0]!=null) v=at[0];   /* the no-load voltage; never V1 or V2 instead */
-  if((m=/Charge\D{0,3}(\d{1,3})\s*%/i.exec(t)) && num(m[1])<=100) p=num(m[1]);
+  if((m=/Charge\D{0,3}(\d{1,3})\s*%/i.exec(t)) && num(m[1])<=150) p=num(m[1]);   /* the Beak shows over 100% for a fresh charge */
   if((m=/R\s*int\W{0,3}(\d{1,2}[.,]\d{1,4})\s*(m?)\s*(?:Ohm|0hm|Ω)/i.exec(t))){ let x=num(m[1].replace(",","."));
     if(x>=1 && /^[689]\./.test(m[1]) && !m[2]) x=num("0"+m[1].slice(1));   /* a slashed 0 read as 6, 8 or 9: these batteries are well under 1 ohm */
     if(m[2]) x=x/1000; if(x>0 && x<0.3) r=x; }   /* a 12 V robot battery is well under 0.3 ohm, even a bad one */
@@ -4234,7 +4234,7 @@ function beakParse(text){
   const pre=/(\d{1,3}(?:\.\d)?)\s*%/g; while(p==null && (m=pre.exec(t))){ const x=num(m[1]); if(x>=0 && x<=100){ p=x; break; } }
   if(p==null){ const s2=/SO[C0]\s*:?\s*(\d{1,3})/i.exec(t); if(s2 && num(s2[1])<=100) p=num(s2[1]); }
   const mre=/(\d{1,3}(?:\.\d{1,2})?)\s*m\s*(?:Ω|ohms?|[OQ0](?![\d.]))/gi; if(r==null && (m=mre.exec(t))){ const x=num(m[1]); if(x>0 && x<200) r=x/1000; }
-  if(r==null){ const ore=/(0\.\d{2,4})\s*(?:Ω|ohms?)?/gi; while((m=ore.exec(t))){ const x=num(m[1]); if(x>0.002 && x<0.2){ r=x; break; } } }
+  if(r==null){ const ore=/(0\.\d{2,4})\s*(?:Ω|ohms?)/gi; while((m=ore.exec(t))){ const x=num(m[1]); if(x>0.002 && x<0.2){ r=x; break; } } }   /* with a unit: a bare 0.0xx in misread text isn't a reading */
   if(r==null){ const lre=/(?:R\s*int|IR|Res\w*)\s*:?\s*(\d{1,3}(?:\.\d{1,3})?)/i.exec(t); if(lre){ const x=num(lre[1]); if(x>0.002 && x<0.2) r=x; else if(x>=2 && x<200) r=x/1000; } }
   /* The Beak works out Rint from the drop between 1 A and 18 A: Rint = (V1 - V2) / 17, and V0 >= V1 >= V2. With all of them
      read, a misread digit almost always breaks this. checked: true (they agree), false (they don't), null (can't tell). */
@@ -4249,12 +4249,12 @@ async function readBeakPhoto(file,el,sync){
   let w; try{ w=await loadTess(); }catch(e){ st.textContent="The photo reader didn't load. It downloads once (about 6 MB) the first time it's used, so connect to the internet once. Type the numbers instead."; return; }
   try{
     let best={v:null,p:null,r:null}, text="";
-    const score=o=>(o.v!=null)+(o.p!=null)+(o.r!=null);
+    const score=o=>(o.v!=null)+(o.p!=null)+(o.r!=null)+(o.checked===true?0.5:o.checked===false?-0.5:0);   /* readings that agree win */
     for(const inv of [null,"other"]){   /* if the first pass misses numbers, try the screen the other way round (light on dark) */
       const pr=await beakPrep(file, inv==null?null:!best.flip); best.flip=pr.flip;
       const out=await w.recognize(pr.c,{},{text:true,blocks:true}), tx=beakText(pr.c,out&&out.data), o=beakParse(tx);
       if(score(o)>score(best)){ best=Object.assign(o,{flip:pr.flip}); text=tx; }
-      if(score(best)===3) break;
+      if(score(best)>=3.5 || (score(best)===3 && best.checked==null)) break;
     }
     let {v,p,r}=best;
     if(best.checked===false){ v=null; r=null; }   /* the Beak's numbers didn't agree with each other: don't fill in a wrong one */
