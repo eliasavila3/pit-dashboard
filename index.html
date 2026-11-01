@@ -250,6 +250,8 @@ button.tile:hover{border-color:var(--brand)}
 .qs-msg{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);max-width:calc(100% - 32px);padding:12px 20px;border-radius:14px;background:var(--brand-deep);color:var(--on-brand);font-weight:700;font-size:20px;text-align:center;box-shadow:0 6px 24px rgba(0,0,0,.35)}
 .qs.fb .qs-msg{top:50%;bottom:auto;transform:translate(-50%,-50%);width:min(440px,calc(100% - 32px));font-size:19px;font-weight:600}
 .qs.fb .qs-frame{display:none}
+.qs-frame.good{border-style:solid;border-color:var(--ok);opacity:1}
+.qs-frame.warn{border-color:var(--warn);opacity:1}
 .qs-prog{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .qs-count{font-family:var(--f-mono);font-weight:600;font-size:16px}
 .qs-chips{display:flex;gap:5px;flex-wrap:wrap}
@@ -2460,7 +2462,7 @@ async function scanSheet(){
         <div class="scanbig"><label class="btn primary">${ICON.camera}Take photo<input type="file" id="sc-cam" accept="image/*" capture="environment" class="sr"></label>
         <label class="btn">${ICON.image}Choose photos<input type="file" id="sc-pick" accept="image/*" multiple class="sr"></label></div>
         <div class="thumbs" id="sc-thumbs"></div>
-        <small class="muted">Lay each page flat and fill the frame. Lamination shines, so tilt the phone a little or turn off overhead glare until no box is washed out. Up to ${max} pages per scan; scan again for more. Pages are read on this device; the photos aren't sent anywhere.</small>
+        <small class="muted">Lay each page flat, hold the phone straight over it, and fill the frame with the whole page. Lamination shines, so tilt the phone a little or turn off overhead glare until no box is washed out. Up to ${max} pages per scan; scan again for more. Pages are read on this device; the photos aren't sent anywhere.</small>
         <div id="sc-status"></div>`;
       const add=files=>{ for(const f of files){ if(scan.files.length>=max) break; scan.files.push(f); scan.urls.push(URL.createObjectURL(f)); }
         el.querySelector("#sc-thumbs").innerHTML=scan.urls.map((u,i)=>`<img src="${u}" alt="Page ${i+1} photo">`).join("");
@@ -2547,11 +2549,11 @@ let qrDec=null;
 function loadQrDecoder(){
   if(qrDec) return qrDec;
   qrDec=(async()=>{
-    try{ if("BarcodeDetector" in window){ const f=await BarcodeDetector.getSupportedFormats(); if(f.includes("qr_code")){ const bd=new BarcodeDetector({formats:["qr_code"]}); return async c=>(await bd.detect(c)).map(x=>({t:x.rawValue, cx:(x.boundingBox.x+x.boundingBox.width/2)/c.width, cy:(x.boundingBox.y+x.boundingBox.height/2)/c.height, s:Math.min(x.boundingBox.width,x.boundingBox.height)/c.height})); } } }catch(e){}
+    try{ if("BarcodeDetector" in window){ const f=await BarcodeDetector.getSupportedFormats(); if(f.includes("qr_code")){ const bd=new BarcodeDetector({formats:["qr_code"]}); return async c=>(await bd.detect(c)).map(x=>({t:x.rawValue, quad:(x.cornerPoints||[]).length===4?x.cornerPoints.map(p=>({x:p.x/c.width,y:p.y/c.height})):null, cx:(x.boundingBox.x+x.boundingBox.width/2)/c.width, cy:(x.boundingBox.y+x.boundingBox.height/2)/c.height, s:Math.min(x.boundingBox.width,x.boundingBox.height)/c.height})); } } }catch(e){}
     await loadJsQr();
     return async c=>{ const d=c.getContext("2d",{willReadFrequently:true}).getImageData(0,0,c.width,c.height); const r=window.jsQR(d.data,d.width,d.height,{inversionAttempts:"dontInvert"}); if(!r) return [];
       const L=r.location, n=pt=>({x:pt.x/c.width, y:pt.y/c.height}), tl=n(L.topLeftCorner), tr=n(L.topRightCorner), br=n(L.bottomRightCorner), bl=n(L.bottomLeftCorner);
-      return [{t:r.data, cx:(tl.x+tr.x+br.x+bl.x)/4, cy:(tl.y+tr.y+br.y+bl.y)/4, tl, tr, bl, s:Math.hypot((bl.x-tl.x)*c.width,(bl.y-tl.y)*c.height)/c.height}]; };
+      return [{t:r.data, quad:[tl,tr,br,bl], cx:(tl.x+tr.x+br.x+bl.x)/4, cy:(tl.y+tr.y+br.y+bl.y)/4, tl, tr, bl, s:Math.hypot((bl.x-tl.x)*c.width,(bl.y-tl.y)*c.height)/c.height}]; };
   })();
   qrDec.catch(()=>{ qrDec=null; });
   return qrDec;
@@ -2587,7 +2589,7 @@ async function qsDecodeBlob(blob){ /* page code on a photo, or null */
    A page's QR code says which page it is and where the page sits in the photo. The page layout comes from the same code that
    prints the PDF, so every checkbox's place on the page is known. Starting next to the code, each printed box is found in the
    photo and the fit is corrected as boxes are found (tilt, curl); then the marker inside each box is measured. */
-const MARK={ink:0.3, done:0.06, blank:0.02, glare:0.3, edge:0.28, score:0.12, found:0.5};   /* tuned on test photos; see readPageLocal */
+const MARK={ink:0.3, done:0.06, doneLost:0.3, doneBetween:0.15, edgeDone:0.8, tipIn:0.2, tipOut:0.08, blank:0.02, glare:0.3, edge:0.28, score:0.12, found:0.5};   /* tuned on test photos; see readPageLocal */
 function polyfit(xs,ys,deg){   /* least squares y = c0 + c1 x + c2 x^2 (deg 0..2) */
   const n=deg+1, M=Array.from({length:n},()=>new Array(n+1).fill(0));
   xs.forEach((x,i)=>{ const p=[1,x,x*x]; for(let r=0;r<n;r++){ for(let c=0;c<n;c++) M[r][c]+=p[r]*p[c]; M[r][n]+=p[r]*ys[i]; } });
@@ -2600,8 +2602,13 @@ function polyfit(xs,ys,deg){   /* least squares y = c0 + c1 x + c2 x^2 (deg 0..2
    percentile, not the single brightest pixel, for the same reason. I.ink is the darkness that counts as marker on this photo. */
 function markImg(c,bs){
   const W=c.width, H=c.height, px=c.getContext("2d",{willReadFrequently:true}).getImageData(0,0,W,H).data;
-  const m=new Float32Array(W*H), t=new Float32Array(W*H), G=new Uint8Array(W*H);
+  const m=new Float32Array(W*H), t=new Float32Array(W*H), G=new Uint8Array(W*H), C=new Uint8Array(W*H);
   for(let i=0,j=0;i<m.length;i++,j+=4){ const r=px[j],g=px[j+1],b=px[j+2], lo=r<g?(r<b?r:b):(g<b?g:b); m[i]=lo; G[i]=lo>=246?1:0; }
+  /* Coloured marker (blue, red, green): measured after evening out the room light's colour cast (paper reads as white), so a
+     coloured stroke can be told apart from the black printed box even where it runs over the box's edge. */
+  const wb=[0,0,0]; let wn=0; for(let j=0;j<px.length;j+=28){ const L=px[j]+px[j+1]+px[j+2]; if(L>360){ wb[0]+=px[j]; wb[1]+=px[j+1]; wb[2]+=px[j+2]; wn++; } }
+  const wmax=wn?Math.max(wb[0],wb[1],wb[2]):1, kr=wn?wmax/Math.max(1,wb[0]):1, kg=wn?wmax/Math.max(1,wb[1]):1, kb=wn?wmax/Math.max(1,wb[2]):1;
+  for(let i=0,j=0;i<m.length;i++,j+=4){ const r=px[j]*kr, g=px[j+1]*kg, b=px[j+2]*kb, hi=Math.max(r,g,b), lo=Math.min(r,g,b); C[i]=(hi-lo)>=45 && (hi-lo)>=0.35*hi?1:0; }
   for(let y=0;y<H;y++){ const o=y*W; for(let x=0;x<W;x++) t[o+x]=(m[o+Math.max(0,x-1)]+m[o+x]+m[o+Math.min(W-1,x+1)])/3; }
   for(let y=0;y<H;y++){ const o=y*W, u=Math.max(0,y-1)*W, d=Math.min(H-1,y+1)*W; for(let x=0;x<W;x++) m[o+x]=(t[u+x]+t[o+x]+t[d+x])/3; }
   const bw=Math.ceil(W/bs), bh=Math.ceil(H/bs), hist=new Uint32Array(bw*bh*64), cnt=new Uint32Array(bw*bh), p90=new Float32Array(bw*bh);
@@ -2615,11 +2622,11 @@ function markImg(c,bs){
       const bg=(dil[y0*bw+x0]*(1-tx)+dil[y0*bw+x1]*tx)*(1-ty)+(dil[y1*bw+x0]*(1-tx)+dil[y1*bw+x1]*tx)*ty, i=y*W+x, v=Math.max(0,Math.min(1,(bg-m[i])/Math.max(bg,40)));
       D[i]=v; if(v<0.2 && !((x+y*7)%13)) paper.push(v); } }
   paper.sort((a,b)=>a-b); const n95=paper.length?paper[Math.floor(paper.length*0.95)]:0;
-  return {D,G,W,H,ink:Math.max(MARK.ink,2*n95+0.12)};
+  return {D,G,C,W,H,ink:Math.max(MARK.ink,2*n95+0.12)};
 }
 /* How well a printed square fits at (cx,cy): a,b = half-side vectors along the page's x and y, in photo pixels.
    Its four sides must all be dark, with paper just outside and (mostly) just inside, so filled blocks and text don't fit. */
-function boxFit(I,cx,cy,a,b){
+function boxFit(I,cx,cy,a,b,inked){   /* inked: don't count marker inside the box against it */
   const {D,W,H}=I, la=Math.hypot(a[0],a[1]), lb=Math.hypot(b[0],b[1]); if(la<3||lb<3) return null;
   const pa=[a[0]/la,a[1]/la], pb=[b[0]/lb,b[1]/lb], at=(x,y)=>{ x=Math.round(x); y=Math.round(y); return x<0||y<0||x>=W||y>=H?-1:D[y*W+x]; };
   const S=12; let edges=[1,1,1,1], ring=0, inner=0;
@@ -2631,7 +2638,7 @@ function boxFit(I,cx,cy,a,b){
     return sum/S; };
   const g=Math.max(3/Math.min(la,lb),0.22), SIDES=[[0,-1],[0,1],[-1,0],[1,0]];   /* top, bottom (run along a); left, right (run along b) */
   for(let k=0;k<4;k++){ const [sx,sy]=SIDES[k], e=side(k,sx,sy,1), o=side(k,sx,sy,1+g), n=side(k,sx,sy,1-g); if(e<0||o<0||n<0) return null; edges[k]=e; ring+=o/4; inner+=n/4; }
-  const e=Math.min(...edges); return {e, score:e-ring-0.5*inner};
+  const e=Math.min(...edges); return {e, score:e-ring-(inked?0:0.5*inner)};
 }
 /* The section number's solid block at the top left of every page: dark inside, paper to its left, above and below. */
 function blockFit(I,cx,cy,a,b){
@@ -2649,9 +2656,47 @@ function affFit(pts){   /* weighted least squares X = c0 + c1 u + c2 v (same for
   const cx=M.map((r,i)=>r[3]/r[i]), cy=M.map((r,i)=>r[4]/r[i]);
   return {o:[cx[0],cy[0]], ex:[cx[1],cy[1]], ey:[cx[2],cy[2]]};
 }
-function boxSearch(I,px,py,a,b,w){   /* best square near (px,py), within w pixels: every 2 px, then every pixel around the best */
+/* Perspective (a photo taken at an angle): page point -> photo pixel through a homography fitted by weighted least squares
+   to pts [u,v,X,Y,w]. Coordinates are scaled to about -1..1 first so the fit stays well conditioned. */
+function homFit(pts,W,H){
+  if(pts.length<5) return null;
+  const S=Math.max(W,H)/2, nu=u=>(u-306)/400, nv=v=>(v-396)/400, nx=x=>(x-W/2)/S, ny=y=>(y-H/2)/S;
+  const A=Array.from({length:8},()=>new Array(9).fill(0));
+  const add=(row,rhs,w)=>{ for(let r=0;r<8;r++){ for(let c=0;c<8;c++) A[r][c]+=w*row[r]*row[c]; A[r][8]+=w*row[r]*rhs; } };
+  pts.forEach(([u,v,X,Y,w])=>{ const U=nu(u), V=nv(v), x=nx(X), y=ny(Y); add([U,V,1,0,0,0,-U*x,-V*x],x,w); add([0,0,0,U,V,1,-U*y,-V*y],y,w); });
+  for(let r=0;r<8;r++) A[r][r]+=1e-9;
+  for(let i=0;i<8;i++){ let piv=i; for(let r=i+1;r<8;r++) if(Math.abs(A[r][i])>Math.abs(A[piv][i])) piv=r; [A[i],A[piv]]=[A[piv],A[i]]; if(Math.abs(A[i][i])<1e-12) return null;
+    for(let r=0;r<8;r++) if(r!==i){ const k=A[r][i]/A[i][i]; for(let c=i;c<9;c++) A[r][c]-=k*A[i][c]; } }
+  const h=A.map((r,i)=>r[8]/r[i]);
+  return (u,v)=>{ const U=nu(u), V=nv(v), z=h[6]*U+h[7]*V+1; return [((h[0]*U+h[1]*V+h[2])/z)*S+W/2, ((h[3]*U+h[4]*V+h[5])/z)*S+H/2]; };
+}
+/* The blue rule under the page header (PDF: x 36 to 576 at y 96) is a straight line in any photo. Starting under the code,
+   follow it left to its end: that's the page's left margin, right above the section block, however the photo is angled. */
+function followRule(I,start,dir,ppt){
+  const {D,W,H}=I, at=(x,y)=>{ x=Math.round(x); y=Math.round(y); return x<0||y<0||x>=W||y>=H?-1:D[y*W+x]; };
+  let d=[dir[0]/Math.hypot(...dir),dir[1]/Math.hypot(...dir)];
+  const peak=(p,reach)=>{ const n=[-d[1],d[0]]; let best=null;   /* darkest spot across the line, averaged a little along it */
+    for(let t=-reach;t<=reach;t++){ let sum=0, k=0; for(let a=-2;a<=2;a++){ const v=at(p[0]+t*n[0]+a*ppt*d[0], p[1]+t*n[1]+a*ppt*d[1]); if(v<0) return null; sum+=v; k++; }
+      const v=sum/k; if(!best||v>best.v) best={v,t,p:[p[0]+t*n[0],p[1]+t*n[1]]}; }
+    if(best){ const side=o=>{ const v=at(best.p[0]+o*n[0],best.p[1]+o*n[1]); return v<0?1:v; }, g=Math.max(3,2.5*ppt);   /* a line, not a dark area: paper on both sides */
+      best.v-=Math.max(side(g),side(-g)); }
+    return best; };
+  let b=peak(start,Math.round(12*ppt)); if(!b || b.v<0.35) return null;
+  const pts=[b.p]; let p=b.p, miss=0;
+  for(let i=0;i<80 && miss<2;i++){
+    const q=[p[0]-15*ppt*d[0], p[1]-15*ppt*d[1]], c=peak(q,Math.max(4,Math.round(3*ppt)));
+    if(!c || c.v<0.35){ miss++; p=q; continue; }
+    miss=0; p=c.p; pts.push(p);
+    if(pts.length>=3){ const f=pts[0], l=pts[pts.length-1], L=Math.hypot(f[0]-l[0],f[1]-l[1]); d=[(f[0]-l[0])/L,(f[1]-l[1])/L]; }   /* keep to the line found so far */
+  }
+  if(pts.length<6) return null;
+  let e=pts[pts.length-1];   /* walk to the exact end */
+  for(let i=0;i<Math.round(20*ppt);i++){ const q=[e[0]-d[0],e[1]-d[1]], c=peak(q,2); if(!c || c.v<0.3) break; e=c.p; }
+  return {end:e, dir:d, len:Math.hypot(pts[0][0]-e[0],pts[0][1]-e[1])};
+}
+function boxSearch(I,px,py,a,b,w,inked){   /* best square near (px,py), within w pixels: every 2 px, then every pixel around the best */
   let best=null; const sizes=[0.92,1,1.08];
-  const tryAt=(x,y,f)=>{ const r=boxFit(I,x,y,[a[0]*f,a[1]*f],[b[0]*f,b[1]*f]); if(r && (!best||r.score>best.score)) best=Object.assign(r,{x,y,f}); };
+  const tryAt=(x,y,f)=>{ const r=boxFit(I,x,y,[a[0]*f,a[1]*f],[b[0]*f,b[1]*f],inked); if(r && (!best||r.score>best.score)) best=Object.assign(r,{x,y,f}); };
   const W2=Math.ceil(w);
   for(let dy=-W2;dy<=W2;dy+=2) for(let dx=-W2;dx<=W2;dx+=2) tryAt(Math.round(px+dx),Math.round(py+dy),1);
   if(!best) return null; const c=best;
@@ -2659,12 +2704,23 @@ function boxSearch(I,px,py,a,b,w){   /* best square near (px,py), within w pixel
   return best;
 }
 /* Share of the box's inside covered by marker, and by glare. */
+/* Share of the box's inside covered by marker, and by glare. edge: coloured marker in the strip just inside the printed
+   outline, on the side where it covers most (a stroke run down the column along the boxes' edges covers a whole side; a
+   stroke that only ends at the edge, or a neighbour's tick tail, covers part of one). Only coloured ink counts there,
+   never the black outline. out: marker just outside the box (most of a stroke drawn on the item number, with its tip in
+   the box, is out there). */
 function boxInk(I,cx,cy,a,b){
-  const {D,G,W,H}=I, la=Math.hypot(a[0],a[1]), k=1-Math.max(4/la,0.26), n=Math.max(8,Math.round(2*la*k));
-  let ink=0, glare=0, tot=0;
-  for(let i=0;i<n;i++) for(let j=0;j<n;j++){ const s=k*(-1+2*(i+0.5)/n), t=k*(-1+2*(j+0.5)/n), x=Math.round(cx+s*a[0]+t*b[0]), y=Math.round(cy+s*a[1]+t*b[1]);
-    if(x<0||y<0||x>=W||y>=H) continue; const p=y*W+x; tot++; if(D[p]>=I.ink) ink++; else if(G[p]) glare++; }
-  return tot?{ink:ink/tot, glare:glare/tot}:{ink:0,glare:1};
+  const {D,G,C,W,H}=I, la=Math.hypot(a[0],a[1]), lb=Math.hypot(b[0],b[1]), k=1-Math.max(4/la,0.26), ke=1-Math.max(2.5/Math.min(la,lb),0.1), n=Math.max(8,Math.round(2*la*ke));
+  let ink=0, inkC=0, glare=0, tot=0; const es=[0,0,0,0], en=[0,0,0,0];
+  for(let i=0;i<n;i++) for(let j=0;j<n;j++){ const s=ke*(-1+2*(i+0.5)/n), t=ke*(-1+2*(j+0.5)/n), x=Math.round(cx+s*a[0]+t*b[0]), y=Math.round(cy+s*a[1]+t*b[1]);
+    if(x<0||y<0||x>=W||y>=H) continue; const p=y*W+x, dark=D[p]>=I.ink;
+    if(Math.abs(s)<=k && Math.abs(t)<=k){ tot++; if(dark){ ink++; if(C[p]) inkC++; } else if(G[p]) glare++; }
+    else { const sd=Math.abs(s)>=Math.abs(t)?(s<0?0:1):(t<0?2:3); en[sd]++; if(dark && C[p]) es[sd]++; } }
+  const edge=Math.max(...es.map((v,i)=>en[i]?v/en[i]:0));
+  let out=0, otot=0; const no=Math.max(8,Math.round(n*0.9));
+  for(let i=0;i<no;i++) for(let j=0;j<no;j++){ const s=1.8*(-1+2*(i+0.5)/no), t=1.8*(-1+2*(j+0.5)/no); if(Math.max(Math.abs(s),Math.abs(t))<1.15) continue;
+    const x=Math.round(cx+s*a[0]+t*b[0]), y=Math.round(cy+s*a[1]+t*b[1]); if(x<0||y<0||x>=W||y>=H) continue; otot++; if(D[y*W+x]>=I.ink) out++; }
+  return tot?{ink:ink/tot, inkC:inkC/tot, glare:glare/tot, edge, out:otot?out/otot:0}:{ink:0,inkC:0,glare:1,edge:0,out:0};
 }
 let jsQrLib=null;
 function loadJsQr(){
@@ -2680,7 +2736,7 @@ async function readPageLocal(blob,cl,N,L){
   for(let k=0;k<3;k++){
     if(k){ const t=document.createElement("canvas"); t.width=Math.max(1,src.width>>1); t.height=Math.max(1,src.height>>1); const tx=t.getContext("2d"); tx.imageSmoothingQuality="high"; tx.drawImage(src,0,0,t.width,t.height); src=t; sc=t.width/c.width; }
     const d=src.getContext("2d",{willReadFrequently:true}).getImageData(0,0,src.width,src.height);
-    const r=window.jsQR(d.data,src.width,src.height,{inversionAttempts:"dontInvert"}); if(r && clQrParse(r.data)){ const L2=r.location, f=p=>[p.x/sc,p.y/sc]; q={t:r.data, tl:f(L2.topLeftCorner), tr:f(L2.topRightCorner), bl:f(L2.bottomLeftCorner)}; break; } }
+    const r=window.jsQR(d.data,src.width,src.height,{inversionAttempts:"dontInvert"}); if(r && clQrParse(r.data)){ const L2=r.location, f=p=>[p.x/sc,p.y/sc]; q={t:r.data, tl:f(L2.topLeftCorner), tr:f(L2.topRightCorner), bl:f(L2.bottomLeftCorner), br:f(L2.bottomRightCorner)}; break; } }
   if(!q) return {warn:"nocode"};
   const pg=clQrParse(q.t);
   if(pg.code!==String(cl.code).toUpperCase()) return {warn:"other", page:pg.page, code:pg.code};
@@ -2695,12 +2751,18 @@ async function readPageLocal(blob,cl,N,L){
   const I=markImg(c,Math.max(24,Math.round(maxS*ppt*2.5)));
   /* Second anchor across the page from the code: the section number block (PDF: 26 x 22 pt at x 36, y 112). With both, the page's
      tilt and scale are known well enough that the first rows can't be mistaken for their neighbours. */
-  const SB={x:49,y:123,hw:13,hh:11}, sb0=aff(SB.x,SB.y), ba=[ex[0]*SB.hw,ex[1]*SB.hw], bb=[ey[0]*SB.hh,ey[1]*SB.hh], bl=Math.round(40*ppt);
+  const SB={x:49,y:123,hw:13,hh:11}, RULE={x0:36,x1:576,y:96};
+  let sb0=aff(SB.x,SB.y), ba=[ex[0]*SB.hw,ex[1]*SB.hw], bb=[ey[0]*SB.hh,ey[1]*SB.hh], bl=Math.round(60*ppt);
+  const rule=followRule(I,aff(500,RULE.y),ex,ppt);
+  if(rule && rule.len>200*ppt*0.5){   /* predict the block from the rule's left end, at the scale the rule shows there */
+    const k=rule.len/((500-RULE.x0)*Math.hypot(...ex)), ux=[-rule.dir[0]*Math.hypot(...ex)*k*-1, -rule.dir[1]*Math.hypot(...ex)*k*-1], vy=[ey[0]*k,ey[1]*k];
+    sb0=[rule.end[0]+(SB.x-RULE.x0)*ux[0]+(SB.y-RULE.y)*vy[0], rule.end[1]+(SB.x-RULE.x0)*ux[1]+(SB.y-RULE.y)*vy[1]];
+    ba=[ux[0]*SB.hw,ux[1]*SB.hw]; bb=[vy[0]*SB.hh,vy[1]*SB.hh]; bl=Math.round(22*ppt*k); }
   let blk=null;
   for(let dy=-bl;dy<=bl;dy+=3) for(let dx=-bl;dx<=bl;dx+=3){ const v=blockFit(I,sb0[0]+dx,sb0[1]+dy,ba,bb); if(v!=null && (!blk||v>blk.v)) blk={v,x:sb0[0]+dx,y:sb0[1]+dy}; }
   if(blk) for(let dy=-2;dy<=2;dy++) for(let dx=-2;dx<=2;dx++){ const v=blockFit(I,blk.x+dx,blk.y+dy,ba,bb); if(v!=null && v>blk.v) blk={v,x:blk.x+dx,y:blk.y+dy}; }
   const anchored=!!(blk && blk.v>=0.4);
-  if(anchored){ const Q=CL_QR_BOX, f=affFit([[Q.x,Q.y,...q.tl,1],[Q.x+Q.s,Q.y,...q.tr,1],[Q.x,Q.y+Q.s,...q.bl,1],[SB.x,SB.y,blk.x,blk.y,4]]);
+  if(anchored){ const Q=CL_QR_BOX, f=affFit([[Q.x,Q.y,...q.tl,1],[Q.x+Q.s,Q.y,...q.tr,1],[Q.x,Q.y+Q.s,...q.bl,1],[SB.x,SB.y,blk.x,blk.y,4]].concat(rule?[[RULE.x0,RULE.y,...rule.end,3]]:[]));
     if(f){ ex=f.ex; ey=f.ey; aff=(u,v)=>[f.o[0]+u*ex[0]+v*ey[0], f.o[1]+u*ex[1]+v*ey[1]]; } }
   /* Line up the top rows together first: one shift that fits all of them. A single box could be mistaken for its neighbour
      (a marked box fits less well than a clean one next to it); the whole set of rows only fits in one place. */
@@ -2708,26 +2770,97 @@ async function readPageLocal(blob,cl,N,L){
   const lim=Math.round((anchored?Math.max(4,0.4*pitch):Math.max(30,maxS*1.6))*ppt);
   /* Evenly spaced rows fit almost as well one row off, so there must be no box one row above the first one (that's the section heading). */
   const r0=rows[0], ghost={x:r0.x, y:r0.y-(rows[1]?rows[1].y-r0.y:r0.s*1.45), s:r0.s};
-  const fitOne=(r,dx,dy)=>{ const p0=aff(r.x,r.y), h=r.s/2, m=boxFit(I,p0[0]+dx,p0[1]+dy,[ex[0]*h,ex[1]*h],[ey[0]*h,ey[1]*h]); return m?Math.max(-0.3,Math.min(1,m.score)):-0.3; };
-  const fitAll=(dx,dy)=>{ let t=-3*Math.max(0,fitOne(ghost,dx,dy)); for(const r of top) t+=fitOne(r,dx,dy); return t; };
-  let sx=0, sy=0, sb=-1e9;
-  for(let dy=-lim;dy<=lim;dy+=3) for(let dx=-lim;dx<=lim;dx+=3){ const t=fitAll(dx,dy); if(t>sb){ sb=t; sx=dx; sy=dy; } }
-  for(let dy=sy-2;dy<=sy+2;dy++) for(let dx=sx-2;dx<=sx+2;dx++){ const t=fitAll(dx,dy); if(t>sb){ sb=t; sx=dx; sy=dy; } }
-  const pairs=[]; let fx=()=>sx, fy=()=>sy;
-  const refit=()=>{ const n=pairs.length, deg=n<3?0:n<6?1:2, vs=pairs.map(p=>p[0]);
-    fx=polyfit(vs,pairs.map(p=>p[1]),deg)||fx; fy=polyfit(vs,pairs.map(p=>p[2]),deg)||fy; };
+  const vb=anchored?SB.y:CL_QR_BOX.y, at0=(u,v,kv)=>aff(u,vb+(v-vb)*kv);
+  const fitOne=(r,dx,dy,kv)=>{ const p0=at0(r.x,r.y,kv), h=r.s/2, m=boxFit(I,p0[0]+dx,p0[1]+dy,[ex[0]*h,ex[1]*h],[ey[0]*h*kv,ey[1]*h*kv]); return m?Math.max(-0.3,Math.min(1,m.score)):-0.3; };
+  const fitAll=(dx,dy,kv)=>{ let t=-3*Math.max(0,fitOne(ghost,dx,dy,kv)); for(const r of top) t+=fitOne(r,dx,dy,kv); return t; };
+  let sx=0, sy=0, skv=1, sb=-1e9;
+  if(!anchored){   /* with the section block found, the rows are followed down from it instead (below) */
+    for(let dy=-lim;dy<=lim;dy+=3) for(let dx=-lim;dx<=lim;dx+=3){ const t=fitAll(dx,dy,1); if(t>sb){ sb=t; sx=dx; sy=dy; } }
+    for(let dy=sy-2;dy<=sy+2;dy++) for(let dx=sx-2;dx<=sx+2;dx++){ const t=fitAll(dx,dy,1); if(t>sb){ sb=t; sx=dx; sy=dy; } } }
+  /* Then follow the rows down the page. Every box found refines the page-to-photo map: first a shift, then (with enough boxes
+     spread down the page) full perspective, so a photo taken at an angle still lines up to the bottom of the page. Each box is
+     looked for at its own size and angle at that spot, close enough to its predicted place that a neighbour can't be mistaken for it. */
+  const Q=CL_QR_BOX, base=[[Q.x,Q.y,...q.tl,2],[Q.x+Q.s,Q.y,...q.tr,2],[Q.x,Q.y+Q.s,...q.bl,2]].concat(q.br?[[Q.x+Q.s,Q.y+Q.s,...q.br,1]]:[]).concat(anchored?[[SB.x,SB.y,blk.x,blk.y,4]]:[]).concat(rule?[[RULE.x0,RULE.y,...rule.end,3]]:[]);
+  let map0=(u,v)=>{ const p=at0(u,v,skv); return [p[0]+sx,p[1]+sy]; };
+  /* Lining up the rows from the section block. Its centre is only roughly known (a solid block with a number in it), and the
+     code, across the page, can be a little off on a bowed or angled page, so the row spacing, the column's angle and a small
+     shift are found together: whatever lines up the printed outlines of the first rows best (marker inside a box doesn't count
+     against it). With the start pinned to the block, being a row out can't fit: spacing that put row 1 on row 2's box would
+     miss the rows below it. */
+  let lx=ex;
+  if(rule){ const kr=rule.len/((500-RULE.x0)*Math.hypot(...ex)); if(kr>0.7 && kr<1.4) lx=[rule.dir[0]*Math.hypot(...ex)*kr, rule.dir[1]*Math.hypot(...ex)*kr]; }
+  if(anchored){
+    const top=rows.slice(0,8), E=Math.hypot(...ey), e1=[ey[0]/E,ey[1]/E];
+    const vOf=(k,th)=>{ const cs=Math.cos(th), sn=Math.sin(th); return [(e1[0]*cs-e1[1]*sn)*E*k,(e1[0]*sn+e1[1]*cs)*E*k]; };
+    const fit=(v,dx,dy)=>{ let t=0; for(const r of top){ const h=r.s/2, x=blk.x+dx+(r.x-SB.x)*lx[0]+(r.y-SB.y)*v[0], y=blk.y+dy+(r.x-SB.x)*lx[1]+(r.y-SB.y)*v[1];
+      const m=boxFit(I,x,y,[lx[0]*h,lx[1]*h],[v[0]*h,v[1]*h],true); t+=m?Math.max(-0.3,Math.min(1,m.score)):-0.3; } return t; };
+    let best=null; const S=Math.round(Math.max(6,6*ppt));
+    const tryAll=(ks,ths,sx0,sy0,R,st)=>{ for(const k of ks) for(const th of ths){ const v=vOf(k,th);
+      for(let dy=sy0-R;dy<=sy0+R;dy+=st) for(let dx=sx0-R;dx<=sx0+R;dx+=st){ const t=fit(v,dx,dy); if(!best||t>best.t) best={t,k,th,dx,dy,v}; } } };
+    const rng=(a,b,st)=>{ const o=[]; for(let x=a;x<=b+1e-9;x+=st) o.push(x); return o; };
+    tryAll(rng(0.7,1.4,0.04),rng(-0.1,0.1,0.05),0,0,S,4);
+    const b0=best; tryAll(rng(b0.k-0.04,b0.k+0.04,0.01),rng(b0.th-0.04,b0.th+0.04,0.02),b0.dx,b0.dy,4,1);
+    if(best && best.t>=0.15*top.length){ const v=best.v, ox=blk.x+best.dx, oy=blk.y+best.dy;
+      map0=(u,w)=>[ox+(u-SB.x)*lx[0]+(w-SB.y)*v[0], oy+(u-SB.x)*lx[1]+(w-SB.y)*v[1]]; } }
+  const pairs=[]; let map=map0;
+  /* Following the rows: each next box is predicted from the ones just found above it (the section block counts as the first),
+     so the column's own direction and spacing in the photo are used, and every step is short. */
+  const seed=anchored?[[SB.x,SB.y,blk.x,blk.y]]:[];
+  /* Page model from found boxes: perspective (homFit) plus a smooth correction down the column, fitted to the boxes, for a
+     page that isn't quite flat (in a sleeve, on a clipboard). P: [u,v,X,Y] of found boxes. */
+  const fitPage=P=>{ const h=homFit(base.concat(P.map(([u,v,X,Y])=>[u,v,X,Y,3])),c.width,c.height); if(!h) return null;
+    const n=P.length, deg=n<4?0:n<8?1:2, vs=P.map(p=>p[1]), rx=P.map(([u,v,X])=>X-h(u,v)[0]), ry=P.map(([u,v,X,Y])=>Y-h(u,v)[1]);
+    const fx=polyfit(vs,rx,deg), fy=polyfit(vs,ry,deg); if(!fx||!fy) return h;
+    const v0=Math.min(...vs), v1=Math.max(...vs), cl=v=>Math.max(v0,Math.min(v1,v));   /* only where boxes were found; held steady beyond */
+    return (u,v)=>{ const p=h(u,v); return [p[0]+fx(cl(v)),p[1]+fy(cl(v))]; }; };
+  const refit=()=>{ const n=pairs.length, v0=Math.min(...pairs.map(p=>p[1])), v1=Math.max(...pairs.map(p=>p[1]));
+    if(n>=4 && v1-v0>=40){ const h=fitPage(pairs); if(h){ map=h; return; } }
+    const P=seed.concat(pairs), deg=P.length<2?0:1, vs=P.map(p=>p[1]), rx=P.map(([u,v,X])=>X-map0(u,v)[0]), ry=P.map(([u,v,X,Y])=>Y-map0(u,v)[1]);   /* until then: shift, then slope */
+    const fx=polyfit(vs,rx,deg), fy=polyfit(vs,ry,deg); if(fx&&fy) map=(u,v)=>{ const p=map0(u,v); return [p[0]+fx(v),p[1]+fy(v)]; }; };
+  refit();
+  const local=(r,f)=>{ const h=r.s/2*(f||1), p0=map(r.x,r.y), pu=map(r.x+1,r.y), pv=map(r.x,r.y+1);   /* the box's half-sides at its own spot */
+    return {p:p0, a:[(pu[0]-p0[0])*h,(pu[1]-p0[1])*h], b:[(pv[0]-p0[0])*h,(pv[1]-p0[1])*h], ppt:Math.hypot(pu[0]-p0[0],pu[1]-p0[1])}; };
   const found={};
-  for(const r of rows){   /* top of the page first: nearest the code */
-    const p0=aff(r.x,r.y), px=p0[0]+fx(r.y), py=p0[1]+fy(r.y), h=r.s/2, a=[ex[0]*h,ex[1]*h], b=[ey[0]*h,ey[1]*h];
-    const w=Math.max(4,0.45*r.s*ppt);
-    const m=boxSearch(I,px,py,a,b,w);
-    if(m && m.e>=MARK.edge && m.score>=MARK.score){ found[r.id]=m; pairs.push([r.y,m.x-p0[0],m.y-p0[1]]); refit(); }
+  for(let i=0;i<rows.length;i++){   /* top of the page first: nearest the anchors */
+    const r=rows[i], L=local(r), gap=Math.min(i?r.y-rows[i-1].y:1e9, i+1<rows.length?rows[i+1].y-r.y:1e9, r.s*1.45);
+    let m=boxSearch(I,L.p[0],L.p[1],L.a,L.b,Math.max(4,0.45*r.s*L.ppt));
+    if(!(m && m.e>=MARK.edge && m.score>=MARK.score)) m=boxSearch(I,L.p[0],L.p[1],L.a,L.b,Math.max(4,Math.min(0.75*r.s,0.33*gap)*L.ppt));   /* a little wider, well short of the next row */
+    if(m && m.e>=MARK.edge && m.score>=MARK.score){ found[r.id]=m; pairs.push([r.x,r.y,m.x,m.y]); refit(); }
   }
-  if(pairs.length<Math.max(1,Math.ceil(rows.length*MARK.found))) return {warn:"lineup", page:pg.page};
-  const items=rows.map(r=>{
-    const m=found[r.id], p0=aff(r.x,r.y), x=m?m.x:p0[0]+fx(r.y), y=m?m.y:p0[1]+fy(r.y), h=r.s/2*(m?m.f:1);
-    const k=boxInk(I,x,y,[ex[0]*h,ex[1]*h],[ey[0]*h,ey[1]*h]);
-    const state=k.ink>=MARK.done?"done" : !m||k.glare>=MARK.glare?"unclear" : k.ink<=MARK.blank?"blank" : "unclear";
+  /* Cross-check: every box found must sit where all the others say it should. One that doesn't (a neighbour's box taken
+     by mistake) is dropped, and its row is left for a person to check. */
+  if(pairs.length>=6){ const h=fitPage(pairs);
+    if(h) for(let i=0;i<rows.length;i++){ const r=rows[i], m=found[r.id]; if(!m) continue;
+      const gap=Math.min(i?r.y-rows[i-1].y:1e9, i+1<rows.length?rows[i+1].y-r.y:1e9, r.s*1.45), p=h(r.x,r.y), q=h(r.x,r.y+1), unit=Math.hypot(q[0]-p[0],q[1]-p[1]);
+      if(Math.hypot(m.x-p[0],m.y-p[1])>0.33*gap*unit){ delete found[r.id]; const k=pairs.findIndex(x=>x[0]===r.x&&x[1]===r.y); if(k>=0) pairs.splice(k,1); } } }
+  /* Enough to read the page: half the boxes found, or enough found boxes that the rest can be placed from them. Marker can
+     hide most boxes (a stroke down the column, a blob in every box). Test the placing: leave out each found box in turn,
+     place it from the others, and it must land within a quarter of a row of where it really is. */
+  const gapOf=i=>Math.min(i?rows[i].y-rows[i-1].y:1e9, i+1<rows.length?rows[i+1].y-rows[i].y:1e9, rows[i].s*1.45);
+  const idx=rows.map((r,i)=>found[r.id]?i:-1).filter(i=>i>=0), lo=idx.length?idx[0]:-1, hi=idx.length?idx[idx.length-1]:-1;
+  let placed=false;
+  if(idx.length>=4 && (anchored||lo<=1)){ placed=true;
+    for(const i of idx){ const r=rows[i], m=found[r.id], h=fitPage(pairs.filter(x=>!(x[0]===r.x&&x[1]===r.y))); if(!h){ placed=false; break; }
+      const p=h(r.x,r.y), q2=h(r.x,r.y+1), unit=Math.hypot(q2[0]-p[0],q2[1]-p[1]);
+      if(Math.hypot(m.x-p[0],m.y-p[1])>0.25*gapOf(i)*unit){ placed=false; break; } } }
+  if(placed){ const h=fitPage(pairs); if(h) map=h; }
+  /* Final check against the page itself: from the boxes found and the code only (leaving out the section block and the
+     rule), the section block must come out where it is, within half a row. A model that's a row out (row 1 read from row 2's
+     box, and so on) misses it by a whole row, however well the boxes agree among themselves. */
+  if(anchored && pairs.length>=3){ const QB=base.slice(0,q.br?4:3), h=homFit(QB.concat(pairs.map(([u,v,X,Y])=>[u,v,X,Y,3])),c.width,c.height);
+    if(h){ const g0=gapOf(0), p=h(SB.x,SB.y), q2=h(SB.x,SB.y+1), unit=Math.hypot(q2[0]-p[0],q2[1]-p[1]);
+      if(Math.hypot(p[0]-blk.x,p[1]-blk.y)>0.5*g0*unit) return {warn:"lineup", page:pg.page, steep:false}; } }
+  if(!placed && pairs.length<Math.max(1,Math.ceil(rows.length*MARK.found))){ const t=q.br&&qrTilt([q.tl,q.tr,q.br,q.bl]); return {warn:"lineup", page:pg.page, steep:!!(t&&t.tilt>32)}; }
+  const items=rows.map((r,i)=>{
+    const m=found[r.id], L=local(r,m?m.f:1), x=m?m.x:L.p[0], y=m?m.y:L.p[1], between=!m && placed && i<hi && (i>lo || anchored);   /* above the first found box, the section block holds it */
+    const k=boxInk(I,x,y,L.a,L.b);
+    /* A box that wasn't found in the photo: between found boxes its place is known, so coloured marker over it counts (black
+       could be the printed outline, a little off); above or below all of them, only a box clearly full of marker counts.
+       Anything else there is left for a person to check. */
+    /* A little marker in the box with most of the stroke outside it (a tick drawn on the item number, its tip in the box) is
+       left for a person to check, not counted as done. */
+    const tip=k.ink>=MARK.done && k.ink<MARK.tipIn && k.out>=MARK.tipOut && k.edge<MARK.edgeDone;
+    const state=!tip && ((m? k.ink>=MARK.done : between? k.inkC>=MARK.doneBetween : k.ink>=MARK.doneLost) || ((m||between) && k.edge>=MARK.edgeDone))?"done" : !m||tip||k.glare>=MARK.glare?"unclear" : k.ink<=MARK.blank?"blank" : "unclear";
     return {no:r.no, state, y:Math.round(Math.max(0,Math.min(1,y/c.height))*1000)/1000, ink:Math.round(k.ink*1000)/1000};
   });
   return {page:pg.page, items};
@@ -2735,13 +2868,13 @@ async function readPageLocal(blob,cl,N,L){
 /* All photos of one scan → the same shape the AI reader returned, plus warnings and the photos that couldn't be read. */
 async function readSheetsLocal(cl,N,blobs,signal){
   try{ await Promise.all([loadJsQr(), loadPdfLib()]); }catch(e){ throw {code:"reader_unavailable"}; }
-  const L=await rowLayout(cl), out={sheet:(cl.code||"")+"-v"+(cl.version||1), items:[], notes:"", warns:[], unread:[]}, seen=new Set();
+  const L=await rowLayout(cl), out={sheet:(cl.code||"")+"-v"+(cl.version||1), items:[], notes:"", warns:[], unread:[], fails:[]}, seen=new Set();
   for(const b of blobs){
     if(signal && signal.aborted) throw {code:"cancelled"};
     let r; try{ r=await readPageLocal(b,cl,N,L); }catch(e){ console.warn("read page",e); r={warn:"failed"}; }
     if(r.items){ if(seen.has(r.page)) { out.warns.push(`Page ${r.page} was in more than one photo; the first one was used.`); continue; } seen.add(r.page); out.items.push(...r.items); continue; }
-    out.unread.push(b);
-    out.warns.push(({nocode:"A photo had no readable page QR code, so it was skipped. Keep the whole page in frame, or reprint sheets made before pages had codes.",
+    out.unread.push(b); out.fails.push(r);
+    out.warns.push(r.warn==="lineup" && r.steep ? `Page ${r.page} was photographed at too much of an angle, so its boxes couldn't be lined up. Retake it with the phone flat, straight over the page, and the whole page in frame.` : ({nocode:"A photo had no readable page QR code, so it was skipped. Keep the whole page in frame, or reprint sheets made before pages had codes.",
       other:`A photo was a page of a different checklist (${r.code}), so it was skipped.`,
       version:`Page ${r.page} was printed from version ${r.ver}, but the checklist is now version ${cl.version||1}. Reprint and laminate it, or mark that page by hand.`,
       lineup:`Page ${r.page}'s boxes couldn't be lined up. Retake it flat, straight on, with the whole page in frame.`,
@@ -2752,7 +2885,7 @@ async function readSheetsLocal(cl,N,blobs,signal){
 const qs={};
 function qsReset(){ Object.assign(qs,{t:null,v:"",cl:null,N:null,need:0,secNos:[],shots:0,pending:[],reading:Promise.resolve(),res:{items:{},warns:new Set(),sheet:"",notes:[]},errs:[],failed:[],
   blobs:{}, stream:null,timer:0,wake:null,desk:false,state:"seek",prev:null,ref:null,stable:0,peak:0,closed:false,finishing:false,live:false,undo:null,cv:null,endTimer:0,
-  want:new Set(),captured:new Set(),seen:null,qrBusy:false,qc:null,decode:null,decErr:false,useAI:false,unread:[]}); }
+  want:new Set(),captured:new Set(),seen:null,qrBusy:false,qc:null,decode:null,decErr:false,useAI:false,unread:[],again:null,checking:false,steepAt:0}); }
 function qsPickTarget(){
   const cur=activeRun(), ok=r=>r&&S.checklists[r.checklistId], nm=nextMatch();
   if(ok(cur) && !runScans(cur).length) return "r:"+cur.id;
@@ -2874,15 +3007,46 @@ async function qsScanQr(){
   qs.qrBusy=false;
 }
 /* frame quality + page code: only a visible, new, steady, sharp checklist page is taken */
+/* How the page sits in the camera view, from its code. Tilt: a square code looks squashed when the phone is at an angle
+   (cos of the tilt = short side / long side). The code is small, so this is rough: about 10 degrees high, give or take 10.
+   It only stops clearly steep shots (and only for a few seconds); whether a page really reads is checked once it's taken.
+   Size and place: the code is 70 pt on a 612 x 792 pt page. */
+const QS_TILT_MAX=45;
+function qrTilt(P){   /* P: the code's 4 corners in order; degrees, averaged over the corners */
+  let t=0, side=0;
+  for(let i=0;i<4;i++){ const p0=P[i], p1=P[(i+1)%4], p3=P[(i+3)%4], e1=[p1[0]-p0[0],p1[1]-p0[1]], e2=[p3[0]-p0[0],p3[1]-p0[1]];
+    const a=e1[0]*e1[0]+e1[1]*e1[1], b=e1[0]*e2[0]+e1[1]*e2[1], c=e2[0]*e2[0]+e2[1]*e2[1], r=Math.sqrt((a-c)*(a-c)+4*b*b), hi=(a+c+r)/2, lo=Math.max(0,(a+c-r)/2);
+    if(!hi) return null; t+=Math.acos(Math.min(1,Math.sqrt(lo/hi)))*180/Math.PI/4; side=Math.max(side,Math.sqrt(hi)); }
+  return {tilt:t, side};
+}
+function qsFraming(hit,vw,vh){
+  const Q=hit&&hit.quad; if(!Q) return null;
+  const t=qrTilt(Q.map(p=>[p.x*vw,p.y*vh])); if(!t) return null;
+  const page=t.side*792/CL_QR_BOX.s, frame=Math.max(vw,vh);
+  let fit=page>frame*1.04?"close" : page<frame*0.5?"far" : "ok";
+  if(fit==="ok" && hit.tl && hit.tr && hit.bl){   /* every page corner in view (the code's own corners give the page's direction) */
+    const o=[hit.tl.x*vw,hit.tl.y*vh], u=[(hit.tr.x-hit.tl.x)*vw/CL_QR_BOX.s,(hit.tr.y-hit.tl.y)*vh/CL_QR_BOX.s], v=[(hit.bl.x-hit.tl.x)*vw/CL_QR_BOX.s,(hit.bl.y-hit.tl.y)*vh/CL_QR_BOX.s];
+    if([[0,0],[612,0],[0,792],[612,792]].some(([x,y])=>{ const px=o[0]+(x-CL_QR_BOX.x)*u[0]+(y-CL_QR_BOX.y)*v[0], py=o[1]+(x-CL_QR_BOX.x)*u[1]+(y-CL_QR_BOX.y)*v[1]; return px<-0.05*vw||py<-0.05*vh||px>1.05*vw||py>1.05*vh; })) fit="out"; }
+  return {tilt:t.tilt, fit};
+}
+function qsFrame(state){ const f=$(".qs-frame"); if(f){ f.classList.toggle("good",state==="good"); f.classList.toggle("warn",state==="warn"); } }
 function qsTick(){
   const v=$("#qs-v"); if(!v || v.readyState<2 || qs.finishing || !v.videoWidth) return;
   qsScanQr();
   if(!qs.decode){ qsMsg(qs.decErr?"The page-code reader didn't load. Check the connection, or use the round button to take each page.":"Getting ready…"); return; }
   const seen=qs.seen && Date.now()-qs.seen.at<900 ? qs.seen : null, pg=seen&&seen.p;
-  if(!pg){ qs.stable=0; qs.peak=0; qsMsg(seen&&seen.any?"That QR code isn't a checklist page":`Show a checklist page. Keep its QR code in view${qs.captured.size?` (${qs.want.size-[...qs.want].filter(n=>qs.captured.has(n)).length} to go)`:""}`); return; }
+  qsFrame("");
+  const again=qs.again && Date.now()-qs.again.at<6000 ? qs.again : null;
+  if(!pg){ qs.stable=0; qs.peak=0; qsMsg(again?again.msg : seen&&seen.any?"That QR code isn't a checklist page":`Show a checklist page. Keep its QR code in view${qs.captured.size?` (${qs.want.size-[...qs.want].filter(n=>qs.captured.has(n)).length} to go)`:""}`); return; }
   if(pg.code!==String(qs.cl.code).toUpperCase()){ qs.stable=0; qsMsg(`That page is from a different checklist (${pg.code})`); return; }
   if(!qs.secNos.includes(pg.page)){ qs.stable=0; qsMsg(`Page ${pg.page} isn't on this checklist. Reprint the sheets`); return; }
-  if(qs.captured.has(pg.page) || !qs.want.has(pg.page)){ qs.stable=0; qsMsg(`${pg.page} ${qsSecName(pg.page)} is already done. Show another page`); return; }
+  if(qs.captured.has(pg.page) || !qs.want.has(pg.page)){ qs.stable=0; const just=qs.lastShot && qs.lastShot.page===pg.page && Date.now()-qs.lastShot.at<3000;
+    qsMsg(qs.checking?"Got it. Checking the last page…" : just?`Got ${pg.page} ${qsSecName(pg.page)}. Show the next page` : `${pg.page} ${qsSecName(pg.page)} is already done. Show another page`); return; }
+  const label=`${pg.page} ${qsSecName(pg.page)}`, fr=qsFraming(pg.hit,v.videoWidth,v.videoHeight);
+  if(again && again.page===pg.page && Date.now()-again.at<2500){ qs.stable=0; qs.peak=0; qsFrame("warn"); qsMsg(again.msg); return; }   /* give them a moment to change the shot */
+  const steep=fr && fr.tilt>QS_TILT_MAX; if(!steep) qs.steepAt=0; else if(!qs.steepAt) qs.steepAt=Date.now();
+  if(fr && (fr.fit!=="ok" || (steep && Date.now()-qs.steepAt<4000))){ qs.stable=0; qs.peak=0; qsFrame("warn");   /* steep for 4 s: take it anyway, the reader decides */
+    qsMsg(fr.fit==="close"||fr.fit==="out"?`${label}: move back so the whole page is in view` : fr.fit==="far"?`${label}: move closer so the page fills the frame` : `${label}: hold the phone flatter, straight over the page`); return; }
   const w=200, h=Math.max(1,Math.round(w*v.videoHeight/v.videoWidth));
   const c=qs.cv||(qs.cv=document.createElement("canvas")); if(c.width!==w||c.height!==h){ c.width=w; c.height=h; }
   const x=c.getContext("2d",{willReadFrequently:true}); x.drawImage(v,0,0,w,h);
@@ -2894,14 +3058,13 @@ function qsTick(){
   const mean=sum/n, sharp=lap/n, clipR=bright?clip/bright:0;
   const dif=(a,b)=>{ if(!a||a.length!==b.length) return 255; let s=0,k=0; for(let i=0;i<b.length;i+=3,k++) s+=Math.abs(b[i]-a[i]); return s/k; };
   const move=dif(qs.prev,g); qs.prev=g;
-  const label=`${pg.page} ${qsSecName(pg.page)}`;
   if(mean<45){ qs.stable=0; qsMsg("Too dark. Move to more light"); return; }
   if(move>5){ qs.stable=0; qs.peak=0; qsMsg(`${label}: hold still…`); return; }
   qs.stable++; if(sharp>qs.peak) qs.peak=sharp;
   const glare=clipR>0.08 && clipR<0.6;
   const good=qs.stable>=4 && !glare && sharp>=Math.max(3.5,qs.peak*0.85);
   if(good || qs.stable>=18) qsCapture(g,pg.page);   /* after ~2.5 s steady, take it anyway; the reader marks hidden boxes Unclear */
-  else qsMsg(glare?`${label}: glare on the page. Tilt it a little`:`${label}: hold still…`);
+  else { qsFrame(glare?"warn":"good"); qsMsg(glare?`${label}: glare on the page. Tilt it a little`:`${label}: good. Hold still…`); }
 }
 async function qsCapture(g,page){
   const v=$("#qs-v"); if(!v || !v.videoWidth || qs.finishing) return;
@@ -2909,7 +3072,7 @@ async function qsCapture(g,page){
   if(page==null && seenP && seenP.code===String(qs.cl.code).toUpperCase()) page=seenP.page;   /* round button: use the page code if one is in view */
   const k=seenP && (page==null || seenP.page===page) ? qsOrientK(seenP.hit) : 0;
   if(page!=null && qs.captured.has(page)){ qsMsg(`${page} ${qsSecName(page)} is already done. Show another page`); return; }
-  if(page!=null) qs.captured.add(page);
+  if(page!=null){ qs.captured.add(page); qs.lastShot={page, at:Date.now()}; }
   qs.stable=0; qs.peak=0;
   const sc=Math.min(1,2200/Math.max(v.videoWidth,v.videoHeight)), c=document.createElement("canvas");
   c.width=Math.round(v.videoWidth*sc); c.height=Math.round(v.videoHeight*sc); c.getContext("2d").drawImage(v,0,0,c.width,c.height);
@@ -2929,9 +3092,12 @@ function qsAddShot(blob,page,batch){
 }
 /* finished when every wanted page is in (by page code), or, with no codes seen, when enough photos are in */
 function qsDoneCheck(){
-  const all=[...qs.want].every(n=>qs.captured.has(n)), byCount=!qs.captured.size && qs.shots>=qs.want.size;
-  if((all||byCount) && !qs.finishing){ qsFinish(); return true; }
-  return false;
+  const done=()=>[...qs.want].every(n=>qs.captured.has(n)) || (!qs.captured.size && qs.shots>=qs.want.size);
+  if(!done() || qs.finishing) return false;
+  if(qs.live && !qs.useAI){   /* the camera stays open until the last page has read, so a page that didn't can be shown again */
+    if(!qs.checking){ qs.checking=true; qs.reading.then(()=>{ qs.checking=false; if(!qs.closed && !qs.finishing && done()) qsFinish(); }); }
+    return true; }
+  qsFinish(); return true;
 }
 function qsParse(out,cl,N){
   const sheet=String(out&&out.sheet||"").toUpperCase().replace(/\s+/g,""), sm=sheet.match(/([A-Z0-9]{4})-?V(\d+)/);
@@ -2948,6 +3114,14 @@ function qsFlush(){
   qs.reading=qs.reading.then(async()=>{
     if(qs.closed) return;
     const out=qs.useAI? await readSheetsAI(cl,N,imgs) : await readSheetsLocal(cl,N,imgs);
+    /* camera still open: a page that didn't read is asked for again straight away, with the reason */
+    if(!qs.useAI && qs.live && !qs.finishing && imgs.length===1 && (out.unread||[]).length===1){
+      const page=Object.keys(qs.blobs).find(k=>qs.blobs[k]===imgs[0]), f=out.fails[0]||{};
+      if(page!=null){ qs.captured.delete(page); delete qs.blobs[page]; qs.shots=Math.max(0,qs.shots-1);
+        const why=f.warn==="lineup"? (f.steep?"hold the phone flatter, straight over the page":"hold it flat and steady, whole page in view") : "keep the whole page in view";
+        qs.again={page, at:Date.now(), msg:`${page} ${qsSecName(page)} didn't read: ${why}. Show it again`};
+        try{ if(navigator.vibrate) navigator.vibrate([80,60,80]); }catch(e){}
+        qsMsg(qs.again.msg); qsProg(); return; } }
     (out.warns||[]).forEach(w=>qs.res.warns.add(w)); qs.unread.push(...(out.unread||[]));
     const p=qsParse(out,cl,N); Object.assign(qs.res.items,p.items); Object.assign(qs.res.pos||(qs.res.pos={}),p.pos); if(p.warn) qs.res.warns.add(p.warn); if(p.sheet) qs.res.sheet=p.sheet; if(p.notes) qs.res.notes.push(p.notes);
     if(!Object.keys(p.items).length && !(out.warns||[]).length) qs.res.warns.add("A page couldn't be read. Its section stays “Not checked yet”.");
