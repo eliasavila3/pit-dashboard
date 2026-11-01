@@ -2354,7 +2354,7 @@ function printRun(run){ if(!run) return; const cl=S.checklists[run.checklistId];
   printChecklist(cl,run.label,runAssign(run)); }
 
 /* ---- scan paper checklist ---- */
-const scan = { files:[], urls:[], ctl:null, result:null };
+const scan = { files:[], urls:[], ctl:null, result:null, t:null };
 async function ensureSample(){
   if(sampleChecked || Store.mode!=="live") return; sampleChecked=true;
   sampleCap = { json:readImage, async limits(){ return {images:{maxCount:READ_IMAGE_MAX}}; } };
@@ -2448,7 +2448,7 @@ async function scanSheet(){
   if(!runs.length && !ups.length){ toast("Start a match checklist first, then scan the sheets."); newRunSheet(); return; }
   const curV=cur&&runs.some(r=>r.id===cur.id)?"r:"+cur.id:(runs[0]?"r:"+runs[0].id:"m:"+ups[0].id);
   ensureSample();   /* only for the "Read with AI instead" backup; pages are read on this device */
-  scan.files=[]; scan.urls.forEach(u=>URL.revokeObjectURL(u)); scan.urls=[]; scan.result=null;
+  scan.files=[]; scan.urls.forEach(u=>URL.revokeObjectURL(u)); scan.urls=[]; scan.result=null; scan.t=null;
   openSheet({title:"Scan checklist sheets", body:`<div class="form" id="scan-body"></div>`, foot:`<button class="btn" data-close>Close</button><button class="btn primary" data-s="read" id="scan-go" disabled>Read sheet</button>`,
     onClose(){ if(scan.ctl) scan.ctl.abort(); scan.urls.forEach(u=>URL.revokeObjectURL(u)); scan.urls=[]; },
     onMount(el){
@@ -2469,10 +2469,12 @@ async function scanSheet(){
         const g=el.querySelector("#scan-go"); g.disabled=!scan.files.length; g.textContent=`Read ${scan.files.length} page${scan.files.length===1?"":"s"}`; };
       el.querySelector("#sc-cam").addEventListener("change",e=>{ add(e.target.files); e.target.value=""; });
       el.querySelector("#sc-pick").addEventListener("change",e=>{ add(e.target.files); e.target.value=""; });
-      el.addEventListener("click",e=>{ const rd=e.target.closest('[data-s="read"],[data-s="ai"]'); if(rd){ const t=scanTarget(el.querySelector("#sc-for").value); if(!t){ toast("Pick which match these sheets are for.","bad"); return; } readScan(el,t,rd.dataset.s==="ai"); } if(e.target.closest('[data-s="stop"]') && scan.ctl) scan.ctl.abort(); });
+      el.addEventListener("click",e=>{ if(e.target.closest('[data-s="pics"]')){ const sel=el.querySelector("#sc-for"), t=scan.t||(sel&&scanTarget(sel.value)); if(t) scanPicsDownload(t); return; }
+        const rd=e.target.closest('[data-s="read"],[data-s="ai"]'); if(rd){ const t=scanTarget(el.querySelector("#sc-for").value); if(!t){ toast("Pick which match these sheets are for.","bad"); return; } readScan(el,t,rd.dataset.s==="ai"); } if(e.target.closest('[data-s="stop"]') && scan.ctl) scan.ctl.abort(); });
     }});
 }
 async function readScan(el,t,useAI){
+  scan.t=t;
   const run=t.run||{id:null,label:t.label}, cl=t.cl;
   const st=el.querySelector("#sc-status"), goBtn=el.querySelector("#scan-go");
   goBtn.disabled=true;
@@ -2480,8 +2482,10 @@ async function readScan(el,t,useAI){
   scan.ctl=new AbortController();
   try{
     const N=numberCl(cl);
-    const imgs=[]; for(const f of scan.files) imgs.push(await shrink(f));
+    const imgs=[]; for(const f of scan.files){ const b=await shrink(f), r=picOfFile.get(f); imgs.push(b);
+      if(r) picRec.set(b,r); else picOfFile.set(f,scanPicsAdd(t,cl,b,null,"upload")); }
     const out=useAI? await readSheetsAI(cl,N,imgs,scan.ctl.signal) : await readSheetsLocal(cl,N,imgs,scan.ctl.signal);
+    scanPicsNote(imgs,out);
     scan.ctl=null;
     const lw=(out&&out.warns||[]).join(" ");
     // choose the number→item map for the version that was printed
@@ -2492,7 +2496,7 @@ async function readScan(el,t,useAI){
       else if(Number(sm[2])!==(cl.version||1)){ if(pr&&pr.rows){ map=Object.fromEntries(pr.rows); warn=`This sheet was printed from version ${sm[2]}. Results were matched to that version's items.`; } else warn=`This sheet was printed from version ${sm[2]} but the checklist is now version ${cl.version}. Some item numbers may not match. Reprint for the next match.`; }
     } else warn="The sheet code couldn't be read. Results were matched to the current version.";
     const items={}; (out&&Array.isArray(out.items)?out.items:[]).forEach(x=>{ const no=String(x&&x.no||"").trim().toLowerCase(); const s=String(x&&x.state||"").toLowerCase(); const id=map[no]; if(id && N.byId[id] && ["done","blank","unclear"].includes(s)) items[id]=s; });
-    if(!Object.keys(items).length){ st.innerHTML=`<div class="notice bad">${esc(lw||"No numbered rows were found. Retake the photo with the whole page in frame.")}</div>${!useAI&&aiReady()?`<button class="btn" data-s="ai">Read with AI instead (needs internet, sends the photos)</button>`:""}`; goBtn.disabled=false; return; }
+    if(!Object.keys(items).length){ st.innerHTML=`<div class="notice bad">${esc(lw||"No numbered rows were found. Retake the photo with the whole page in frame.")}</div>${!useAI&&aiReady()?`<button class="btn" data-s="ai">Read with AI instead (needs internet, sends the photos)</button>`:""}${scanPicsBtn(t,'data-s="pics"')}`; goBtn.disabled=false; return; }
     scan.result={items, notes:String(out.notes||"").trim(), sheet:sm?sm[1]+"-v"+sm[2]:"", warn:[warn,lw].filter(Boolean).join(" "), by:""};
     reviewScan(t,cl,N);
   }catch(e){
@@ -2509,7 +2513,7 @@ function reviewScan(t,cl,N){
   const draw=()=>{
     const cnt={done:0,blank:0,unclear:0}; Object.values(r.items).forEach(s=>cnt[s]++);
     const newDone=Object.entries(r.items).filter(([id,s])=>s==="done"&&!checks[id]).length;
-    return `${r.warn?`<div class="notice warn">${esc(r.warn)}</div>`:""}
+    return `${r.warn?`<div class="notice warn">${esc(r.warn)}</div>`:""}${scanPicsCount(t)?`<div class="row">${scanPicsBtn(t,'data-s="pics"')}</div>`:""}
       <div class="stats"><div class="stat ok"><div class="v">${cnt.done}</div><div class="k">Marked done</div></div><div class="stat ${cnt.blank?"bad":""}"><div class="v">${cnt.blank}</div><div class="k">Left blank</div></div><div class="stat ${cnt.unclear?"warn":""}"><div class="v">${cnt.unclear}</div><div class="k">Unclear</div></div></div>
       <p><b>For ${esc(run.label)}</b>${run.id?"":" (a new match checklist starts when you save)"}. Read ${secs.length} section${secs.length===1?"":"s"}. Tap a row to correct it. <b>${newDone}</b> item${newDone===1?"":"s"} will be marked done on ${esc(run.label)}; blank and unclear rows go to “Needs attention”.</p>
       ${r.notes?`<label class="field"><span>Handwritten notes found</span><textarea id="sr-notes">${esc(r.notes)}</textarea></label><label class="row" style="gap:10px"><input type="checkbox" id="sr-savenote" checked style="width:24px;height:24px"> Save these to Event notes</label>`:""}
@@ -2868,10 +2872,11 @@ async function readPageLocal(blob,cl,N,L){
 /* All photos of one scan → the same shape the AI reader returned, plus warnings and the photos that couldn't be read. */
 async function readSheetsLocal(cl,N,blobs,signal){
   try{ await Promise.all([loadJsQr(), loadPdfLib()]); }catch(e){ throw {code:"reader_unavailable"}; }
-  const L=await rowLayout(cl), out={sheet:(cl.code||"")+"-v"+(cl.version||1), items:[], notes:"", warns:[], unread:[], fails:[]}, seen=new Set();
+  const L=await rowLayout(cl), out={sheet:(cl.code||"")+"-v"+(cl.version||1), items:[], notes:"", warns:[], unread:[], fails:[], perPhoto:[]}, seen=new Set();
   for(const b of blobs){
     if(signal && signal.aborted) throw {code:"cancelled"};
     let r; try{ r=await readPageLocal(b,cl,N,L); }catch(e){ console.warn("read page",e); r={warn:"failed"}; }
+    out.perPhoto.push(r.items? {page:r.page, read:Object.fromEntries(r.items.map(x=>[x.no,x.state]))} : {page:r.page||null, warn:r.warn});
     if(r.items){ if(seen.has(r.page)) { out.warns.push(`Page ${r.page} was in more than one photo; the first one was used.`); continue; } seen.add(r.page); out.items.push(...r.items); continue; }
     out.unread.push(b); out.fails.push(r);
     out.warns.push(r.warn==="lineup" && r.steep ? `Page ${r.page} was photographed at too much of an angle, so its boxes couldn't be lined up. Retake it with the phone flat, straight over the page, and the whole page in frame.` : ({nocode:"A photo had no readable page QR code, so it was skipped. Keep the whole page in frame, or reprint sheets made before pages had codes.",
@@ -2881,6 +2886,48 @@ async function readSheetsLocal(cl,N,blobs,signal){
       failed:"A photo couldn't be opened, so it was skipped."})[r.warn]);
   }
   return out;
+}
+/* ---- Photos from scanning, to download per match ----
+   Every photo taken or chosen while scanning (retakes too) is kept on this device, in memory until the page is closed, so a
+   match's photos can be downloaded together: real sheets to test the page reader with. Nothing is uploaded. */
+const scanPics={}, picRec=new WeakMap(), picOfFile=new WeakMap();
+const picKey=t=>t.matchId?"m:"+t.matchId : t.run&&t.run.id?"r:"+t.run.id : "l:"+t.label;
+function scanPicsAdd(t,cl,blob,page,via){
+  const k=picKey(t), g=scanPics[k]||(scanPics[k]={label:t.label, list:[]});
+  g.sheet=(cl.code||"")+"-v"+(cl.version||1);
+  const rec={blob, page:page||null, at:now(), via, read:null}; g.list.push(rec); picRec.set(blob,rec); return rec;
+}
+function scanPicsNote(imgs,out){ (out&&out.perPhoto||[]).forEach((p,i)=>{ const rec=picRec.get(imgs[i]); if(rec){ rec.read=p; if(p.page&&!rec.page) rec.page=p.page; } }); }
+const scanPicsCount=t=>((scanPics[picKey(t)]||{}).list||[]).length;
+const scanPicsBtn=(t,attr)=>{ const n=scanPicsCount(t); return n?`<button class="btn" ${attr}>${ICON.image}Download this match's photos (${n})</button>`:""; };
+/* A .zip with the files stored as they are (photos are already compressed): one download for all of a match's photos. */
+function zipStore(files){
+  const T=zipStore.t||(zipStore.t=Array.from({length:256},(_,n)=>{ let c=n; for(let k=0;k<8;k++) c=c&1?0xEDB88320^(c>>>1):c>>>1; return c>>>0; }));
+  const crc=d=>{ let c=0xFFFFFFFF; for(let i=0;i<d.length;i++) c=T[(c^d[i])&255]^(c>>>8); return (c^0xFFFFFFFF)>>>0; };
+  const enc=new TextEncoder(), parts=[], dir=[]; let off=0;
+  for(const f of files){
+    const nm=enc.encode(f.name), d=f.data, c=crc(d), h=new DataView(new ArrayBuffer(30)), e=new DataView(new ArrayBuffer(46));
+    [[0,0x04034b50,4],[4,20,2],[6,0x0800,2],[12,0x21,2],[14,c,4],[18,d.length,4],[22,d.length,4],[26,nm.length,2]].forEach(([o,v,w])=>w===4?h.setUint32(o,v,true):h.setUint16(o,v,true));
+    [[0,0x02014b50,4],[4,20,2],[6,20,2],[8,0x0800,2],[14,0x21,2],[16,c,4],[20,d.length,4],[24,d.length,4],[28,nm.length,2],[42,off,4]].forEach(([o,v,w])=>w===4?e.setUint32(o,v,true):e.setUint16(o,v,true));
+    parts.push(h,nm,d); dir.push(e,nm); off+=30+nm.length+d.length;
+  }
+  const size=dir.reduce((t,x)=>t+x.byteLength,0), end=new DataView(new ArrayBuffer(22));
+  end.setUint32(0,0x06054b50,true); end.setUint16(8,files.length,true); end.setUint16(10,files.length,true); end.setUint32(12,size,true); end.setUint32(16,off,true);
+  return new Blob([...parts,...dir,end],{type:"application/zip"});
+}
+async function scanPicsDownload(t){
+  const g=scanPics[picKey(t)]; if(!g||!g.list.length){ toast("No scan photos from this match on this device."); return; }
+  const files=[], seen={};
+  for(const [i,r] of g.list.entries()){
+    const base=r.page?"page-"+String(r.page).padStart(2,"0"):"photo-"+(i+1), n=seen[base]=(seen[base]||0)+1;
+    files.push({name:`${base}${n>1?"-try"+n:""}.${/png/.test(r.blob.type)?"png":"jpg"}`, data:new Uint8Array(await r.blob.arrayBuffer()), rec:r});
+  }
+  const info={match:g.label, sheet:g.sheet, downloadedAt:new Date().toISOString(),
+    photos:files.map(f=>({file:f.name, page:f.rec.page, takenAt:new Date(f.rec.at).toISOString(), via:f.rec.via, read:f.rec.read}))};
+  files.push({name:"scan.json", data:new TextEncoder().encode(JSON.stringify(info,null,2))});
+  const d=new Date(), when=`${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}-${pad2(d.getHours())}${pad2(d.getMinutes())}`;
+  await downloads.save({filename:`${String(g.label||"match").replace(/[^\w.]+/g,"-").replace(/^-+|-+$/g,"")}-scan-photos-${when}.zip`, data:zipStore(files)});
+  toast(`Downloaded ${g.list.length} photo${g.list.length===1?"":"s"}`);
 }
 const qs={};
 function qsReset(){ Object.assign(qs,{t:null,v:"",cl:null,N:null,need:0,secNos:[],shots:0,pending:[],reading:Promise.resolve(),res:{items:{},warns:new Set(),sheet:"",notes:[]},errs:[],failed:[],
@@ -2942,7 +2989,7 @@ function qsOpen(){
     for(const x of shots){ if(qs.closed||qs.finishing) break;
       if(x.pg && x.pg.code!==String(qs.cl.code).toUpperCase()){ other++; continue; }
       if(x.pg && (qs.captured.has(x.pg.page) || !qs.secNos.includes(x.pg.page))){ dup++; continue; }
-      if(!x.pg && anyCode){ noCode++; continue; }
+      if(!x.pg && anyCode){ noCode++; scanPicsAdd(qs.t,qs.cl,x.blob,null,"photo").read={warn:"nocode"}; continue; }   /* kept for the photo download: the page code may just not have read */
       qsAddShot(x.blob, x.pg?x.pg.page:null, true); }
     if(other) qs.res.warns.add(`${other} photo${other===1?" was":"s were"} of a different checklist and ${other===1?"was":"were"} skipped.`);
     if(dup) qs.res.warns.add(`${dup} photo${dup===1?" was a repeat":"s were repeats"} of a page already in and ${dup===1?"was":"were"} skipped.`);
@@ -2962,6 +3009,7 @@ function qsClick(e){
   else if(a==="undo") qsUndo();
   else if(a==="attn"){ qsClose(); ui.ckTab="status"; PREF.set("ckTab","status"); go("checklist"); }
   else if(a==="retry") qsRetry();
+  else if(a==="pics") scanPicsDownload(qs.t);
   else if(a==="ai"){ qs.useAI=true; qs.pending=qs.unread.splice(0); qs.errs=[]; qs.failed=[]; qs.res.warns=new Set(); qs.finishing=false; qsFinish(); }
   else if(a==="more") qsMore();
 }
@@ -3083,6 +3131,7 @@ async function qsCapture(g,page){
 function qsFlashIt(){ const f=$("#qs-flash"); if(f){ f.classList.remove("go"); void f.offsetWidth; f.classList.add("go"); } try{ if(navigator.vibrate) navigator.vibrate(60); }catch(e){} }
 function qsAddShot(blob,page,batch){
   if(qs.closed) return;
+  scanPicsAdd(qs.t, qs.cl, blob, page, qs.live?"camera":"photo");
   if(page!=null) qs.captured.add(page);
   if(page!=null) qs.blobs[page]=blob;
   qs.shots++; qs.pending.push(blob); qsProg(); if(!qs.live) qsFbLabel();
@@ -3114,6 +3163,7 @@ function qsFlush(){
   qs.reading=qs.reading.then(async()=>{
     if(qs.closed) return;
     const out=qs.useAI? await readSheetsAI(cl,N,imgs) : await readSheetsLocal(cl,N,imgs);
+    scanPicsNote(imgs,out);
     /* camera still open: a page that didn't read is asked for again straight away, with the reason */
     if(!qs.useAI && qs.live && !qs.finishing && imgs.length===1 && (out.unread||[]).length===1){
       const page=Object.keys(qs.blobs).find(k=>qs.blobs[k]===imgs[0]), f=out.fails[0]||{};
@@ -3140,7 +3190,7 @@ async function qsFinish(){
     const warns=[...qs.res.warns];
     end.innerHTML=`<div class="qs-card"><h2>Couldn't read the pages</h2><p>${esc(qs.errs.length?scanErr(code):warns.length?"":"No checkboxes were found. Hold each page flat and fill the frame.")}</p>
       ${warns.map(w=>`<div class="notice warn">${esc(w)}</div>`).join("")}
-      <div class="row">${qs.failed.length?`<button class="btn primary" data-q="retry">Try reading again</button>`:""}<button class="btn" data-q="more">Scan again</button>${!qs.useAI&&qs.unread.length&&aiReady()?`<button class="btn" data-q="ai">Read with AI instead</button>`:""}<button class="btn ghost" data-q="close">Close</button></div>
+      <div class="row">${qs.failed.length?`<button class="btn primary" data-q="retry">Try reading again</button>`:""}<button class="btn" data-q="more">Scan again</button>${scanPicsBtn(qs.t,'data-q="pics"')}${!qs.useAI&&qs.unread.length&&aiReady()?`<button class="btn" data-q="ai">Read with AI instead</button>`:""}<button class="btn ghost" data-q="close">Close</button></div>
       ${!qs.useAI&&qs.unread.length&&aiReady()?`<p class="muted" style="font-size:14px">AI reading needs internet and sends these photos to the board's photo reader.</p>`:""}</div>`;
     return;
   }
@@ -3209,6 +3259,7 @@ function qsSummary(){
     <div class="row">${attn?`<button class="btn primary" data-q="attn">See what needs attention</button>`:`<button class="btn primary" data-q="close">Close</button>`}
       ${miss.length?`<button class="btn" data-q="more">${ICON.camera}Scan missing pages</button>`:""}
       <button class="btn ghost" data-q="undo">Undo</button></div>
+    ${scanPicsBtn(qs.t,'data-q="pics"')}
     ${clean?`<p class="muted" style="font-size:14px">Closing in a few seconds…</p>`:""}</div>`;
   if(clean) qs.endTimer=setTimeout(()=>{ if(!qs.closed) qsClose(); },6000);
 }
