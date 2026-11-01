@@ -845,7 +845,10 @@ const Q = {};
 /* config.js names a Supabase project: the board then always runs live and shows the sign-in screen when no one is signed in */
 const sbConfigured = /^https:\/\//.test(SUPABASE_URL) && !SUPABASE_URL.includes("YOUR-PROJECT") && !!SUPABASE_ANON_KEY && !SUPABASE_ANON_KEY.includes("YOUR-");
 const sb = (sbConfigured && window.supabase) ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
-let authLinkErr = "";   /* set at boot when a sign-in link comes back with an error */
+let authLinkErr = "";   /* set at boot when an old sign-in link comes back with an error */
+/* Sign-in is by email only: every account uses this same password, so it is not a secret.
+   pit_members still decides who can see (viewer) or change (editor) the board. */
+const BOARD_PW = "madtown-1323-pit-board";
 
 const Store = {
   mode:"connecting", db:null, ready:null, loaded:{}, buf:{}, ts:{}, offline:false,
@@ -955,15 +958,11 @@ function showGate(state,o){
   const retry=`<button class="btn primary wide" data-g="retry">Try again</button>`;
   if(state==="connecting") el.innerHTML=card("Pit board",`<div class="thinking"><span class="spin"></span><span>Connecting to the board…</span></div>`);
   else if(state==="signin") el.innerHTML=card("Sign in to the pit board",`
-    <p>Enter your email and you'll get a sign-in link. Only emails added to the board can open it.</p>
-    ${authLinkErr?`<div class="notice bad">That sign-in link didn't work (${esc(authLinkErr)}). Send a new one.</div>`:""}
+    <p>Enter your email. Only emails added to the board can open it.</p>
+    ${authLinkErr?`<div class="notice bad">That sign-in link didn't work (${esc(authLinkErr)}). Sign in with your email below.</div>`:""}
     <label class="field"><span>Email</span><input type="email" id="g-email" autocomplete="email" inputmode="email" placeholder="you@example.com" value="${esc(gate.email)}"></label>
     <div id="g-msg"></div>
-    <button class="btn primary wide" data-g="send">Email me a sign-in link</button>`);
-  else if(state==="sent") el.innerHTML=card("Check your email",`
-    <p>A sign-in link is on its way to <b>${esc(gate.email)}</b>. Open it on this device to get onto the board. It can take a minute to arrive.</p>
-    <div id="g-msg"></div>
-    <div class="row"><button class="btn" data-g="send">Send the link again</button><button class="btn" data-g="other">Use a different email</button></div>`);
+    <button class="btn primary wide" data-g="send">Sign in</button>`);
   else if(state==="unreachable") el.innerHTML=card("Can't reach the board",`
     <div class="notice bad">The board's server (Supabase) isn't answering, so nothing can load or save right now.</div>
     <p>${gate.detail?esc(gate.detail)+" ":""}Check that this device is on the pit Wi-Fi or a hotspot. This screen tries again every few seconds.</p>
@@ -981,11 +980,27 @@ function hideGate(){ gate.state=null; const el=$("#gate"); if(el){ el.hidden=tru
 /* resolves on Try again, on sign-in, or after ms (0 = no timeout) */
 function gateWait(ms){ return new Promise(res=>{ gate.wake=res; if(ms) setTimeout(res,ms); }); }
 function gateKick(){ const w=gate.wake; gate.wake=null; if(w) w(); }
-/* Supabase sends 429 for two limits: a short per-address wait ("...after 37 seconds") and the project's hourly email cap */
-function linkLimitMsg(error){
-  const m=/after (\d+) seconds?/i.exec(String(error&&error.message||""));
-  return m ? `A link was just sent to this email. Wait ${m[1]} seconds, then try again.`
-    : "The board has sent its limit of sign-in emails for this hour. Try again later, or ask the board owner to raise the email limit in Supabase.";
+/* Signs in with the email alone (BOARD_PW). The first time an email is used, its account is made.
+   Returns "" when signed in, otherwise what to show. */
+async function boardSignIn(email){
+  const why=e=>{
+    const c=String(e&&e.code||""), st=Number(e&&e.status)||0;
+    if(mapErr(e).code==="unavailable") return "Can't reach the board's server. Check the Wi-Fi or hotspot, then try again.";
+    if(st===429) return "Too many sign-in tries from this network. Wait a few minutes, then try again.";
+    if(c==="user_already_exists" || c==="email_not_confirmed") return "This email's account was made with an emailed link. The board owner needs to run supabase/migrations/2026-11-01-email-sign-in.sql once, then try again.";
+    if(c==="signup_disabled") return "Can't sign in with this email yet. The board owner needs to run supabase/migrations/2026-11-01-email-sign-in.sql (for accounts made with an emailed link) and turn on \"Allow new users to sign up\" in Supabase (for new members).";
+    return "Couldn't sign in ("+(e&&e.message||"error")+").";
+  };
+  try{
+    let r=await sb.auth.signInWithPassword({email, password:BOARD_PW});
+    if(!r.error) return "";
+    if(r.error.code!=="invalid_credentials") return why(r.error);
+    /* no account for this email yet */
+    r=await sb.auth.signUp({email, password:BOARD_PW});
+    if(r.error) return why(r.error);
+    if(!r.data.session) return "Supabase is still set to confirm emails. The board owner needs to turn off \"Confirm email\" (Authentication > Sign In / Providers > Email).";
+    return "";
+  }catch(e){ return why(e); }
 }
 function gateMsg(text){ const m=$("#g-msg"); if(m) m.innerHTML=text?`<div class="notice bad">${esc(text)}</div>`:""; }
 async function gateSend(){
@@ -993,28 +1008,23 @@ async function gateSend(){
   const inp=$("#g-email"); if(inp) gate.email=inp.value.trim().toLowerCase();
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(gate.email)){ gateMsg("Enter your email address."); return; }
   gate.busy=true; $$("#gate [data-g]").forEach(b=>b.disabled=true);
-  let error=null;
-  try{ ({error}=await sb.auth.signInWithOtp({email:gate.email, options:{emailRedirectTo:location.origin+location.pathname}})); }catch(e){ error=e; }
+  const err=await boardSignIn(gate.email);
   gate.busy=false; $$("#gate [data-g]").forEach(b=>b.disabled=false);
-  if(!error){ authLinkErr=""; showGate("sent"); return; }
-  const st=Number(error.status)||0;
-  gateMsg(mapErr(error).code==="unavailable" ? "Can't reach the board's server to send the email. Check the Wi-Fi or hotspot, then try again."
-    : st===429 ? linkLimitMsg(error)
-    : "Couldn't send the sign-in email ("+(error.message||"error")+"). Check the address and try again.");
+  if(err){ gateMsg(err); return; }
+  authLinkErr=""; showGate("connecting"); gateKick();
 }
 document.addEventListener("click", e=>{
   const b=e.target.closest("#gate [data-g]"); if(!b || b.disabled) return;
   const g=b.dataset.g;
   if(g==="send") gateSend();
-  else if(g==="other"){ showGate("signin"); }
   else if(g==="retry"){ showGate("connecting"); gateKick(); }
   else if(g==="signout"){ b.disabled=true; sb.auth.signOut().catch(()=>{}).then(()=>location.reload()); }
 });
 document.addEventListener("keydown", e=>{ if(e.key==="Enter" && e.target && e.target.id==="g-email"){ e.preventDefault(); gateSend(); } });
-/* a link opened in another tab signs this one in too */
+/* signing in from another tab signs this one in too */
 document.addEventListener("visibilitychange", async ()=>{
   if(document.visibilityState!=="visible" || !sb || !gate.state) return;
-  if(gate.state==="signin"||gate.state==="sent"){ try{ const r=await sb.auth.getSession(); if(r.data&&r.data.session){ showGate("connecting"); gateKick(); } }catch(e){} }
+  if(gate.state==="signin"){ try{ const r=await sb.auth.getSession(); if(r.data&&r.data.session){ showGate("connecting"); gateKick(); } }catch(e){} }
   else if(gate.state==="unreachable") gateKick();
 });
 window.addEventListener("online", ()=>{ if(gate.state==="unreachable") gateKick(); });
@@ -2144,18 +2154,18 @@ function settingsSheet(){
 function authField(){
   if(!sb) return "";
   if(me.id) return `<div class="field"><span>Board sign-in</span><div class="row"><span>${esc(me.email)}</span><button class="btn" data-s="signout">Sign out of the board</button></div></div>`;
-  return `<label class="field"><span>Board sign-in</span><input type="email" id="st-email" autocomplete="email" inputmode="email" placeholder="you@example.com"><small>You get an email with a sign-in link. Open it on this device.</small></label>
-    <button class="btn" data-s="link">Email me a sign-in link</button>`;
+  return `<label class="field"><span>Board sign-in</span><input type="email" id="st-email" autocomplete="email" inputmode="email" placeholder="you@example.com"><small>Only emails added to the board can open it.</small></label>
+    <button class="btn" data-s="link">Sign in</button>`;
 }
 async function authClick(el,b){
   if(b.dataset.s==="signout"){ b.disabled=true; try{ await sb.auth.signOut(); }catch(e){} location.reload(); return; }
   const email=val(el,"st-email").toLowerCase();
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ toast("Enter your email address.","bad"); return; }
   b.disabled=true;
-  const {error}=await sb.auth.signInWithOtp({email, options:{emailRedirectTo:location.origin+location.pathname}});
+  const err=await boardSignIn(email);
   b.disabled=false;
-  if(error){ toast(error.status===429?linkLimitMsg(error):"Couldn't send the sign-in email. Check the address and try again.","bad"); return; }
-  toast("Sign-in link sent. Open it from your email on this device.");
+  if(err){ toast(err,"bad"); return; }
+  location.reload();
 }
 
 /* ---- match checklist runs ---- */
