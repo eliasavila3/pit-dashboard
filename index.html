@@ -2589,7 +2589,7 @@ async function qsDecodeBlob(blob){ /* page code on a photo, or null */
    A page's QR code says which page it is and where the page sits in the photo. The page layout comes from the same code that
    prints the PDF, so every checkbox's place on the page is known. Starting next to the code, each printed box is found in the
    photo and the fit is corrected as boxes are found (tilt, curl); then the marker inside each box is measured. */
-const MARK={ink:0.3, done:0.06, doneLost:0.3, doneBetween:0.15, edgeDone:0.4, blank:0.02, glare:0.3, edge:0.28, score:0.12, found:0.5};   /* tuned on test photos; see readPageLocal */
+const MARK={ink:0.3, done:0.06, doneLost:0.3, doneBetween:0.15, edgeDone:0.8, blank:0.02, glare:0.3, edge:0.28, score:0.12, found:0.5};   /* tuned on test photos; see readPageLocal */
 function polyfit(xs,ys,deg){   /* least squares y = c0 + c1 x + c2 x^2 (deg 0..2) */
   const n=deg+1, M=Array.from({length:n},()=>new Array(n+1).fill(0));
   xs.forEach((x,i)=>{ const p=[1,x,x*x]; for(let r=0;r<n;r++){ for(let c=0;c<n;c++) M[r][c]+=p[r]*p[c]; M[r][n]+=p[r]*ys[i]; } });
@@ -2705,8 +2705,9 @@ function boxSearch(I,px,py,a,b,w,inked){   /* best square near (px,py), within w
 }
 /* Share of the box's inside covered by marker, and by glare. */
 /* Share of the box's inside covered by marker, and by glare. edge: coloured marker in the strip just inside the printed
-   outline, on the side where it covers most (a stroke run down the column along the boxes' edges covers a whole side; the
-   tail of a neighbour's tick only pokes into a corner). Only coloured ink counts there, never the black outline. */
+   outline, on the side where it covers most (a stroke run down the column along the boxes' edges covers a whole side; a
+   stroke that only ends at the edge, or a neighbour's tick tail, covers part of one). Only coloured ink counts there,
+   never the black outline. */
 function boxInk(I,cx,cy,a,b){
   const {D,G,C,W,H}=I, la=Math.hypot(a[0],a[1]), lb=Math.hypot(b[0],b[1]), k=1-Math.max(4/la,0.26), ke=1-Math.max(2.5/Math.min(la,lb),0.1), n=Math.max(8,Math.round(2*la*ke));
   let ink=0, inkC=0, glare=0, tot=0; const es=[0,0,0,0], en=[0,0,0,0];
@@ -2777,20 +2778,39 @@ async function readPageLocal(blob,cl,N,L){
      looked for at its own size and angle at that spot, close enough to its predicted place that a neighbour can't be mistaken for it. */
   const Q=CL_QR_BOX, base=[[Q.x,Q.y,...q.tl,2],[Q.x+Q.s,Q.y,...q.tr,2],[Q.x,Q.y+Q.s,...q.bl,2]].concat(q.br?[[Q.x+Q.s,Q.y+Q.s,...q.br,1]]:[]).concat(anchored?[[SB.x,SB.y,blk.x,blk.y,4]]:[]).concat(rule?[[RULE.x0,RULE.y,...rule.end,3]]:[]);
   let map0=(u,v)=>{ const p=at0(u,v,skv); return [p[0]+sx,p[1]+sy]; };
-  if(anchored){   /* row 1 sits just under the block: find it allowing for the slant and size a photo at an angle gives the boxes */
-    const r=rows[0], p0=map0(r.x,r.y), h=r.s/2, w=Math.max(4,0.45*(rows[1]?Math.min(rows[1].y-r.y,r.s*1.45):r.s)*ppt), fu=[ex[0]*h,ex[1]*h], fv=[ey[0]*h,ey[1]*h];
-    let best=null;
-    for(const sh of [-0.45,-0.3,-0.15,0,0.15,0.3,0.45]) for(const kv of [0.8,0.9,1,1.1,1.2]){
-      const b=[(fv[0]+sh*fu[0])*kv,(fv[1]+sh*fu[1])*kv], m=boxSearch(I,p0[0],p0[1],fu,b,w,true); if(m && (!best||m.score>best.score)) best=Object.assign(m,{b}); }
-    if(best && best.e>=MARK.edge && best.score>=MARK.score){   /* the column's direction and row spacing in this photo: from the block to row 1 */
-      const ux=ex, dv=r.y-SB.y, vy=[(best.x-blk.x-(r.x-SB.x)*ux[0])/dv,(best.y-blk.y-(r.x-SB.x)*ux[1])/dv];
-      map0=(u,v)=>[blk.x+(u-SB.x)*ux[0]+(v-SB.y)*vy[0], blk.y+(u-SB.x)*ux[1]+(v-SB.y)*vy[1]]; } }
+  /* Lining up the rows from the section block. Its centre is only roughly known (a solid block with a number in it), and the
+     code, across the page, can be a little off on a bowed or angled page, so the row spacing, the column's angle and a small
+     shift are found together: whatever lines up the printed outlines of the first rows best (marker inside a box doesn't count
+     against it). With the start pinned to the block, being a row out can't fit: spacing that put row 1 on row 2's box would
+     miss the rows below it. */
+  let lx=ex;
+  if(rule){ const kr=rule.len/((500-RULE.x0)*Math.hypot(...ex)); if(kr>0.7 && kr<1.4) lx=[rule.dir[0]*Math.hypot(...ex)*kr, rule.dir[1]*Math.hypot(...ex)*kr]; }
+  if(anchored){
+    const top=rows.slice(0,8), E=Math.hypot(...ey), e1=[ey[0]/E,ey[1]/E];
+    const vOf=(k,th)=>{ const cs=Math.cos(th), sn=Math.sin(th); return [(e1[0]*cs-e1[1]*sn)*E*k,(e1[0]*sn+e1[1]*cs)*E*k]; };
+    const fit=(v,dx,dy)=>{ let t=0; for(const r of top){ const h=r.s/2, x=blk.x+dx+(r.x-SB.x)*lx[0]+(r.y-SB.y)*v[0], y=blk.y+dy+(r.x-SB.x)*lx[1]+(r.y-SB.y)*v[1];
+      const m=boxFit(I,x,y,[lx[0]*h,lx[1]*h],[v[0]*h,v[1]*h],true); t+=m?Math.max(-0.3,Math.min(1,m.score)):-0.3; } return t; };
+    let best=null; const S=Math.round(Math.max(6,6*ppt));
+    const tryAll=(ks,ths,sx0,sy0,R,st)=>{ for(const k of ks) for(const th of ths){ const v=vOf(k,th);
+      for(let dy=sy0-R;dy<=sy0+R;dy+=st) for(let dx=sx0-R;dx<=sx0+R;dx+=st){ const t=fit(v,dx,dy); if(!best||t>best.t) best={t,k,th,dx,dy,v}; } } };
+    const rng=(a,b,st)=>{ const o=[]; for(let x=a;x<=b+1e-9;x+=st) o.push(x); return o; };
+    tryAll(rng(0.7,1.4,0.04),rng(-0.1,0.1,0.05),0,0,S,4);
+    const b0=best; tryAll(rng(b0.k-0.04,b0.k+0.04,0.01),rng(b0.th-0.04,b0.th+0.04,0.02),b0.dx,b0.dy,4,1);
+    if(best && best.t>=0.15*top.length){ const v=best.v, ox=blk.x+best.dx, oy=blk.y+best.dy;
+      map0=(u,w)=>[ox+(u-SB.x)*lx[0]+(w-SB.y)*v[0], oy+(u-SB.x)*lx[1]+(w-SB.y)*v[1]]; } }
   const pairs=[]; let map=map0;
   /* Following the rows: each next box is predicted from the ones just found above it (the section block counts as the first),
      so the column's own direction and spacing in the photo are used, and every step is short. */
   const seed=anchored?[[SB.x,SB.y,blk.x,blk.y]]:[];
+  /* Page model from found boxes: perspective (homFit) plus a smooth correction down the column, fitted to the boxes, for a
+     page that isn't quite flat (in a sleeve, on a clipboard). P: [u,v,X,Y] of found boxes. */
+  const fitPage=P=>{ const h=homFit(base.concat(P.map(([u,v,X,Y])=>[u,v,X,Y,3])),c.width,c.height); if(!h) return null;
+    const n=P.length, deg=n<4?0:n<8?1:2, vs=P.map(p=>p[1]), rx=P.map(([u,v,X])=>X-h(u,v)[0]), ry=P.map(([u,v,X,Y])=>Y-h(u,v)[1]);
+    const fx=polyfit(vs,rx,deg), fy=polyfit(vs,ry,deg); if(!fx||!fy) return h;
+    const v0=Math.min(...vs), v1=Math.max(...vs), cl=v=>Math.max(v0,Math.min(v1,v));   /* only where boxes were found; held steady beyond */
+    return (u,v)=>{ const p=h(u,v); return [p[0]+fx(cl(v)),p[1]+fy(cl(v))]; }; };
   const refit=()=>{ const n=pairs.length, v0=Math.min(...pairs.map(p=>p[1])), v1=Math.max(...pairs.map(p=>p[1]));
-    if(n>=4 && v1-v0>=40){ const h=homFit(base.concat(pairs.map(([u,v,X,Y])=>[u,v,X,Y,3])),c.width,c.height); if(h){ map=h; return; } }
+    if(n>=4 && v1-v0>=40){ const h=fitPage(pairs); if(h){ map=h; return; } }
     const P=seed.concat(pairs), deg=P.length<2?0:1, vs=P.map(p=>p[1]), rx=P.map(([u,v,X])=>X-map0(u,v)[0]), ry=P.map(([u,v,X,Y])=>Y-map0(u,v)[1]);   /* until then: shift, then slope */
     const fx=polyfit(vs,rx,deg), fy=polyfit(vs,ry,deg); if(fx&&fy) map=(u,v)=>{ const p=map0(u,v); return [p[0]+fx(v),p[1]+fy(v)]; }; };
   refit();
@@ -2800,12 +2820,12 @@ async function readPageLocal(blob,cl,N,L){
   for(let i=0;i<rows.length;i++){   /* top of the page first: nearest the anchors */
     const r=rows[i], L=local(r), gap=Math.min(i?r.y-rows[i-1].y:1e9, i+1<rows.length?rows[i+1].y-r.y:1e9, r.s*1.45);
     let m=boxSearch(I,L.p[0],L.p[1],L.a,L.b,Math.max(4,0.45*r.s*L.ppt));
-    if(!(m && m.e>=MARK.edge && m.score>=MARK.score)) m=boxSearch(I,L.p[0],L.p[1],L.a,L.b,Math.max(4,Math.min(0.75*r.s,0.42*gap)*L.ppt));   /* a little wider, still short of the next row */
+    if(!(m && m.e>=MARK.edge && m.score>=MARK.score)) m=boxSearch(I,L.p[0],L.p[1],L.a,L.b,Math.max(4,Math.min(0.75*r.s,0.33*gap)*L.ppt));   /* a little wider, well short of the next row */
     if(m && m.e>=MARK.edge && m.score>=MARK.score){ found[r.id]=m; pairs.push([r.x,r.y,m.x,m.y]); refit(); }
   }
   /* Cross-check: every box found must sit where all the others say it should. One that doesn't (a neighbour's box taken
      by mistake) is dropped, and its row is left for a person to check. */
-  if(pairs.length>=6){ const h=homFit(base.concat(pairs.map(([u,v,X,Y])=>[u,v,X,Y,3])),c.width,c.height);
+  if(pairs.length>=6){ const h=fitPage(pairs);
     if(h) for(let i=0;i<rows.length;i++){ const r=rows[i], m=found[r.id]; if(!m) continue;
       const gap=Math.min(i?r.y-rows[i-1].y:1e9, i+1<rows.length?rows[i+1].y-r.y:1e9, r.s*1.45), p=h(r.x,r.y), q=h(r.x,r.y+1), unit=Math.hypot(q[0]-p[0],q[1]-p[1]);
       if(Math.hypot(m.x-p[0],m.y-p[1])>0.33*gap*unit){ delete found[r.id]; const k=pairs.findIndex(x=>x[0]===r.x&&x[1]===r.y); if(k>=0) pairs.splice(k,1); } } }
@@ -2816,11 +2836,16 @@ async function readPageLocal(blob,cl,N,L){
   const idx=rows.map((r,i)=>found[r.id]?i:-1).filter(i=>i>=0), lo=idx.length?idx[0]:-1, hi=idx.length?idx[idx.length-1]:-1;
   let placed=false;
   if(idx.length>=4 && (anchored||lo<=1)){ placed=true;
-    for(const i of idx){ const r=rows[i], m=found[r.id], rest=pairs.filter(x=>!(x[0]===r.x&&x[1]===r.y)).map(([u,v,X,Y])=>[u,v,X,Y,3]);
-      const h=homFit(base.concat(rest),c.width,c.height); if(!h){ placed=false; break; }
+    for(const i of idx){ const r=rows[i], m=found[r.id], h=fitPage(pairs.filter(x=>!(x[0]===r.x&&x[1]===r.y))); if(!h){ placed=false; break; }
       const p=h(r.x,r.y), q2=h(r.x,r.y+1), unit=Math.hypot(q2[0]-p[0],q2[1]-p[1]);
       if(Math.hypot(m.x-p[0],m.y-p[1])>0.25*gapOf(i)*unit){ placed=false; break; } } }
-  if(placed){ const h=homFit(base.concat(pairs.map(([u,v,X,Y])=>[u,v,X,Y,3])),c.width,c.height); if(h) map=h; }
+  if(placed){ const h=fitPage(pairs); if(h) map=h; }
+  /* Final check against the page itself: from the boxes found and the code only (leaving out the section block and the
+     rule), the section block must come out where it is, within half a row. A model that's a row out (row 1 read from row 2's
+     box, and so on) misses it by a whole row, however well the boxes agree among themselves. */
+  if(anchored && pairs.length>=3){ const QB=base.slice(0,q.br?4:3), h=homFit(QB.concat(pairs.map(([u,v,X,Y])=>[u,v,X,Y,3])),c.width,c.height);
+    if(h){ const g0=gapOf(0), p=h(SB.x,SB.y), q2=h(SB.x,SB.y+1), unit=Math.hypot(q2[0]-p[0],q2[1]-p[1]);
+      if(Math.hypot(p[0]-blk.x,p[1]-blk.y)>0.5*g0*unit) return {warn:"lineup", page:pg.page, steep:false}; } }
   if(!placed && pairs.length<Math.max(1,Math.ceil(rows.length*MARK.found))){ const t=q.br&&qrTilt([q.tl,q.tr,q.br,q.bl]); return {warn:"lineup", page:pg.page, steep:!!(t&&t.tilt>32)}; }
   const items=rows.map((r,i)=>{
     const m=found[r.id], L=local(r,m?m.f:1), x=m?m.x:L.p[0], y=m?m.y:L.p[1], between=!m && placed && i<hi && (i>lo || anchored);   /* above the first found box, the section block holds it */
