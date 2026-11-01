@@ -2589,7 +2589,7 @@ async function qsDecodeBlob(blob){ /* page code on a photo, or null */
    A page's QR code says which page it is and where the page sits in the photo. The page layout comes from the same code that
    prints the PDF, so every checkbox's place on the page is known. Starting next to the code, each printed box is found in the
    photo and the fit is corrected as boxes are found (tilt, curl); then the marker inside each box is measured. */
-const MARK={ink:0.3, done:0.06, doneLost:0.3, doneBetween:0.15, edgeDone:0.8, blank:0.02, glare:0.3, edge:0.28, score:0.12, found:0.5};   /* tuned on test photos; see readPageLocal */
+const MARK={ink:0.3, done:0.06, doneLost:0.3, doneBetween:0.15, edgeDone:0.8, tipIn:0.2, tipOut:0.08, blank:0.02, glare:0.3, edge:0.28, score:0.12, found:0.5};   /* tuned on test photos; see readPageLocal */
 function polyfit(xs,ys,deg){   /* least squares y = c0 + c1 x + c2 x^2 (deg 0..2) */
   const n=deg+1, M=Array.from({length:n},()=>new Array(n+1).fill(0));
   xs.forEach((x,i)=>{ const p=[1,x,x*x]; for(let r=0;r<n;r++){ for(let c=0;c<n;c++) M[r][c]+=p[r]*p[c]; M[r][n]+=p[r]*ys[i]; } });
@@ -2707,7 +2707,8 @@ function boxSearch(I,px,py,a,b,w,inked){   /* best square near (px,py), within w
 /* Share of the box's inside covered by marker, and by glare. edge: coloured marker in the strip just inside the printed
    outline, on the side where it covers most (a stroke run down the column along the boxes' edges covers a whole side; a
    stroke that only ends at the edge, or a neighbour's tick tail, covers part of one). Only coloured ink counts there,
-   never the black outline. */
+   never the black outline. out: marker just outside the box (most of a stroke drawn on the item number, with its tip in
+   the box, is out there). */
 function boxInk(I,cx,cy,a,b){
   const {D,G,C,W,H}=I, la=Math.hypot(a[0],a[1]), lb=Math.hypot(b[0],b[1]), k=1-Math.max(4/la,0.26), ke=1-Math.max(2.5/Math.min(la,lb),0.1), n=Math.max(8,Math.round(2*la*ke));
   let ink=0, inkC=0, glare=0, tot=0; const es=[0,0,0,0], en=[0,0,0,0];
@@ -2716,7 +2717,10 @@ function boxInk(I,cx,cy,a,b){
     if(Math.abs(s)<=k && Math.abs(t)<=k){ tot++; if(dark){ ink++; if(C[p]) inkC++; } else if(G[p]) glare++; }
     else { const sd=Math.abs(s)>=Math.abs(t)?(s<0?0:1):(t<0?2:3); en[sd]++; if(dark && C[p]) es[sd]++; } }
   const edge=Math.max(...es.map((v,i)=>en[i]?v/en[i]:0));
-  return tot?{ink:ink/tot, inkC:inkC/tot, glare:glare/tot, edge}:{ink:0,inkC:0,glare:1,edge:0};
+  let out=0, otot=0; const no=Math.max(8,Math.round(n*0.9));
+  for(let i=0;i<no;i++) for(let j=0;j<no;j++){ const s=1.8*(-1+2*(i+0.5)/no), t=1.8*(-1+2*(j+0.5)/no); if(Math.max(Math.abs(s),Math.abs(t))<1.15) continue;
+    const x=Math.round(cx+s*a[0]+t*b[0]), y=Math.round(cy+s*a[1]+t*b[1]); if(x<0||y<0||x>=W||y>=H) continue; otot++; if(D[y*W+x]>=I.ink) out++; }
+  return tot?{ink:ink/tot, inkC:inkC/tot, glare:glare/tot, edge, out:otot?out/otot:0}:{ink:0,inkC:0,glare:1,edge:0,out:0};
 }
 let jsQrLib=null;
 function loadJsQr(){
@@ -2853,7 +2857,10 @@ async function readPageLocal(blob,cl,N,L){
     /* A box that wasn't found in the photo: between found boxes its place is known, so coloured marker over it counts (black
        could be the printed outline, a little off); above or below all of them, only a box clearly full of marker counts.
        Anything else there is left for a person to check. */
-    const state=(m? k.ink>=MARK.done : between? k.inkC>=MARK.doneBetween : k.ink>=MARK.doneLost) || ((m||between) && k.edge>=MARK.edgeDone)?"done" : !m||k.glare>=MARK.glare?"unclear" : k.ink<=MARK.blank?"blank" : "unclear";
+    /* A little marker in the box with most of the stroke outside it (a tick drawn on the item number, its tip in the box) is
+       left for a person to check, not counted as done. */
+    const tip=k.ink>=MARK.done && k.ink<MARK.tipIn && k.out>=MARK.tipOut && k.edge<MARK.edgeDone;
+    const state=!tip && ((m? k.ink>=MARK.done : between? k.inkC>=MARK.doneBetween : k.ink>=MARK.doneLost) || ((m||between) && k.edge>=MARK.edgeDone))?"done" : !m||tip||k.glare>=MARK.glare?"unclear" : k.ink<=MARK.blank?"blank" : "unclear";
     return {no:r.no, state, y:Math.round(Math.max(0,Math.min(1,y/c.height))*1000)/1000, ink:Math.round(k.ink*1000)/1000};
   });
   return {page:pg.page, items};
