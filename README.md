@@ -6,7 +6,7 @@ Madtown Robotics (FRC 1323) pit dashboard: one static page (`index.html`) backed
 | --- | --- |
 | Page | `index.html` + `config.js` (host anywhere static: GitHub Pages, Netlify, Vercel…) |
 | Database, sign-in rules, photo bucket | `supabase/schema.sql` |
-| Photo reading (checklist scans, Battery Beak) | In the page, on each device (checklist page reader; Tesseract.js for the Battery Beak). No server or API key. |
+| Photo reading (checklist scans) | In the page, on each device (checklist page reader). No server or API key. Battery Beak readings are typed in. |
 
 ## Set up
 
