@@ -12,7 +12,7 @@ Follow these in every session in this project. The same text lives in the reposi
 | Code (master copy) | GitHub `eliasavila3/pit-dashboard`, branch `main` |
 | Hosting | Vercel, Hobby plan; deploys `main` automatically and posts a preview link on every pull request |
 | Data, sign-in, photos | Supabase project (tables, Auth email link, storage bucket) |
-| Photo reading (checklist scans, Battery Beak) | In the page, on each device: the checklist page reader and Tesseract.js (Battery Beak). No server and no API key; the old `read-image` function and the Claude API are no longer used |
+| Photo reading (checklist scans) | In the page, on each device: the checklist page reader. Battery Beak readings are typed in by hand. No server and no API key; the old `read-image` function and the Claude API are no longer used |
 | Who can get in | Supabase table `pit_members` (email, role `editor` or `viewer`) |
 
 ## 1. Know your area
