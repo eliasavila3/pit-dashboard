@@ -3972,7 +3972,8 @@ const BGRADE = {good:"Good",watch:"Watch",retire:"Retire",retired:"Retired",none
 const BGRADE_CLS = {good:"ok",watch:"warn",retire:"bad",retired:"",none:""};
 const BREADY = {ready:"Ready",charge:"Needs charge",assigned:"Set for match",none:"No reading",out:"Retired",no:"Don't use"};
 const BREADY_CLS = {ready:"ok",charge:"warn",assigned:"brand",none:"",out:"",no:"bad"};
-const BATT_DEF = {irGood:0.015, irRetire:0.020, vMin:12.7, pctMin:90};
+const BATT_DEF = {irGood:0.015, irRetire:0.020, vMin:12.7, pctMin:90, chargeMin:60};   /* chargeMin: minutes on the charger after a match */
+const LOG_KINDS = ["pre","post"];   /* checks are logged before and after matches; older off-charger and spot checks still show */
 function battCfg(){ const c=Object.assign({}, BATT_DEF, settings().batt||{}); for(const k in BATT_DEF){ c[k]=Number(c[k]); if(!isFinite(c[k])) c[k]=BATT_DEF[k]; } return c; }
 const batsSorted = () => Object.values(S.batteries).sort((a,b)=>(a.retired?1:0)-(b.retired?1:0)||String(a.label).localeCompare(String(b.label),undefined,{numeric:true}));
 const batLogs = id => Object.values(S.battlog).filter(r=>r.batteryId===id).sort((a,b)=>(a.at||0)-(b.at||0));
@@ -4007,9 +4008,11 @@ function batInfo(b){
   else if(upcoming){ ready="assigned"; why="Set for "+mlabel(upcoming); }
   else if(!last){ ready="none"; why="Log a check to see if it's ready"; }
   else if(grade==="retire"){ ready="no"; why=`Resistance ${fmtIr(lastIr.ir)} Ω is above ${fmtIr(cfg.irRetire)} Ω`; }
-  else if(last.kind==="post" || (last.at||0)<lastUse){ ready="charge"; why="Used since its last check. Charge it, then log an off-charger check"; }
+  else if(lastUse && t-lastUse<cfg.chargeMin*60000){   /* used within the charge time: still charging, whatever was checked since */
+    ready="charge"; why=`Used ${ago(lastUse)}. Charging: about ${Math.ceil((cfg.chargeMin*60000-(t-lastUse))/60000)} min to go`; }
+  else if(last.kind==="post" || (last.at||0)<lastUse){ ready="ready"; why=`Charged since its last match (${cfg.chargeMin} min). Check it before the match`; }
   else if((numOr(last.v)!=null && last.v<cfg.vMin) || (numOr(last.pct)!=null && last.pct<cfg.pctMin)){ ready="charge"; why=`Below ${cfg.vMin} V or ${cfg.pctMin}% at last check`; }
-  else { ready="ready"; why="Charged and checked"; }
+  else { ready="ready"; why="Checked and ready"; }
   return {b,logs,last,lastIr,grade,ready,why,uses,cycles,avgDrop,drops,upcoming,lastUse};
 }
 function suggestBatteries(){
@@ -4077,8 +4080,8 @@ paint(){
       <div class="row">${m?`<button class="btn primary" data-act="bat-assign" data-id="${x.b.id}" data-match="${m.id}">Use ${esc(x.b.label)} for ${esc(mlabel(m))}</button>`:`<span class="muted">Add the match schedule to set a battery for each match.</span>`}
       ${m&&sug.length>1?`<span class="muted">Or:</span>${sug.slice(1,4).map(y=>`<button class="btn sm" data-act="bat-assign" data-id="${y.b.id}" data-match="${m.id}">${esc(y.b.label)} · ${BGRADE[y.grade]}</button>`).join("")}`:""}</div>`;
   } else {
-    h+=`<span class="eyebrow">${m?"Battery for "+esc(mlabel(m)):"Next battery"}</span><h3 style="font-size:26px">No battery is ready</h3><p class="muted">A battery is ready once it has an off-charger check at or above ${battCfg().vMin} V and ${battCfg().pctMin}%, and resistance under the retire cutoff.</p>
-      <div class="row"><button class="btn primary" data-act="bat-log" data-kind="charged">${ICON.batteries}Log off-charger check</button>${m?`<button class="btn" data-act="bat-pick" data-match="${m.id}">Pick one anyway</button>`:""}</div>`;
+    h+=`<span class="eyebrow">${m?"Battery for "+esc(mlabel(m)):"Next battery"}</span><h3 style="font-size:26px">No battery is ready</h3><p class="muted">A battery is ready once it has had ${battCfg().chargeMin} minutes on the charger since its last match, with resistance under the retire cutoff.</p>
+      <div class="row"><button class="btn primary" data-act="bat-log" data-kind="pre">${ICON.batteries}Log pre-match check</button>${m?`<button class="btn" data-act="bat-pick" data-match="${m.id}">Pick one anyway</button>`:""}</div>`;
   }
   h+=`</section>`;
   const act=infos.filter(x=>!x.b.retired), cnt=k=>act.filter(x=>x.ready===k).length;
@@ -4117,21 +4120,21 @@ function batEditSheet(id){
       const bid=b?b.id:newId();
       if(!write("batteries",bid,"set",Object.assign(base,{label,purchased:val(el,"bt-pur"),brand:val(el,"bt-brand"),notes:val(el,"bt-notes"),updatedAt:now()}))) return;
       if(b && b.label!==label) Object.values(S.matches).filter(m=>m.batteryId===bid).forEach(m=>write("matches",m.id,"update",{battery:label}));
-      closeSheet(); toast(b?"Battery saved":`${label} added`); if(!b) batLogSheet(bid,"charged"); }); } });
+      closeSheet(); toast(b?"Battery saved":`${label} added`); if(!b) batLogSheet(bid,"pre"); }); } });
 }
-function batLogSheet(batId,kind,matchId){
+function batLogSheet(batId,kind,matchId,keep){   /* keep: what was typed, when the form reopens after Cancel on a warning */
   const bats=batsSorted().filter(b=>!b.retired);
   if(!bats.length){ toast("Add a battery first."); batEditSheet(); return; }
   const nm=nextMatch(), t=now();
   let bid=batId&&S.batteries[batId]?batId:(nm&&batOfMatch(nm)?batOfMatch(nm).id:bats[0].id);
   const x0=batInfo(S.batteries[bid]);
-  kind=kind||(x0.last&&x0.last.kind==="pre"?"post":"charged");
+  kind=LOG_KINDS.includes(kind)? kind : (x0.last&&x0.last.kind==="pre"?"post":"pre");
   const ms=matchesSorted(), past=ms.filter(m=>m.result||(m.time&&effTime(m)<=t)), up=ms.filter(m=>!m.result&&(!m.time||effTime(m)>t));
   const defMatch=k=>{ if(matchId&&S.matches[matchId]) return matchId; if(k==="pre") return nm?nm.id:""; if(k==="post"){ const mine=past.filter(m=>batOfMatch(m)&&batOfMatch(m).id===bid).pop(); return (mine||past[past.length-1]||{}).id||""; } return ""; };
   const matchOpts=sel=>`<option value="">Not tied to a match</option>${[...past.slice(-6).reverse(),...up.slice(0,6)].map(m=>`<option value="${m.id}" ${sel===m.id?"selected":""}>${esc(mlabel(m))}${m.time?" · "+fmtClock(effTime(m)):""}${batOfMatch(m)?" · "+esc(batOfMatch(m).label):""}</option>`).join("")}`;
   openSheet({title:"Log battery check", body:`<div class="form">
       <div class="field"><span>Battery</span>${seg("bat",bats.map(b=>[b.id,esc(b.label)]),bid,"bseg")}</div>
-      <div class="field"><span>When</span>${seg("kind",Object.entries(BKIND),kind)}</div>
+      <div class="field"><span>When</span>${seg("kind",LOG_KINDS.map(k=>[k,BKIND[k]]),kind)}</div>
       <label class="field" id="bl-m-f"><span>Match</span><select id="bl-match">${matchOpts(defMatch(kind))}</select></label>
       <label class="row" id="bl-assign-f" style="gap:10px;min-height:48px"><input type="checkbox" id="bl-assign" checked style="width:24px;height:24px"> <span>Use this battery for that match</span></label>
       <div class="bnums"><label class="field"><span>Voltage (V)</span><input type="text" inputmode="decimal" id="bl-v" placeholder="12.95" autocomplete="off"></label>
@@ -4151,11 +4154,15 @@ function batLogSheet(batId,kind,matchId){
         if(sb){ setTimeout(()=>{ const k=segVal(el,"kind"); if(sb.closest('[data-name="kind"]') && k!==lastKind){ lastKind=k; el.querySelector("#bl-match").innerHTML=matchOpts(defMatch(k)); } if(sb.closest('[data-name="bat"]')) bid=segVal(el,"bat"); sync(); },0); return; }
         if(!e.target.closest('[data-s="save"]')) return;
         const b=S.batteries[segVal(el,"bat")]; if(!b){ toast("Pick a battery.","bad"); return; }
-        const k=segVal(el,"kind")||"check", v=parseNum(val(el,"bl-v")), pct=parseNum(val(el,"bl-pct")), ir=parseIr(val(el,"bl-ir"));
+        const k=segVal(el,"kind")||"pre", v=parseNum(val(el,"bl-v")), pct=parseNum(val(el,"bl-pct")), ir=parseIr(val(el,"bl-ir"));
         if(v==null&&ir==null&&pct==null){ toast("Enter at least one reading.","bad"); return; }
         if(v!=null&&(v<5||v>16)){ toast("Voltage should be between 5 and 16 V. Check the number.","bad"); return; }
         if(ir!=null&&ir>0.2){ toast("That resistance looks too high. Enter ohms, like 0.012.","bad"); return; }
         const mid=(k==="pre"||k==="post")?val(el,"bl-match"):"";
+        if(k==="pre" && mid && S.matches[mid]){   /* before the match: back-to-back, still charging, low readings, already set elsewhere */
+          const cs=batConcerns(b,S.matches[mid],{v,pct,ir});
+          if(cs.length){ const keep={v:val(el,"bl-v"), pct:val(el,"bl-pct"), ir:val(el,"bl-ir"), assign:el.querySelector("#bl-assign").checked};
+            if(!(await confirmBox(cs.join(" ")+` Log it and use it for ${mlabel(S.matches[mid])} anyway?`,"Log and use anyway"))){ batLogSheet(b.id,k,mid,keep); return; } } }
         const rec=Object.assign(stamp(),{batteryId:b.id,kind:k,matchId:mid||null,v,pct,ir,via:el.dataset.via||"typed"});
         if(!write("battlog",newId(),"set",rec)) return;
         if(k==="pre"&&mid&&el.querySelector("#bl-assign").checked) write("matches",mid,"update",{batteryId:b.id,battery:b.label});
@@ -4165,22 +4172,28 @@ function batLogSheet(batId,kind,matchId){
         else if(k!=="post"&&v!=null&&v<cfg.vMin) msg+=`. Below ${cfg.vMin} V; charge before using.`;
         closeSheet(); toast(msg, ir!=null&&ir>cfg.irRetire?"bad":"");
       });
+      if(keep){ el.querySelector("#bl-v").value=keep.v||""; el.querySelector("#bl-pct").value=keep.pct||""; el.querySelector("#bl-ir").value=keep.ir||""; el.querySelector("#bl-assign").checked=keep.assign!==false; }
       sync();
     }});
 }
-/* Why a battery shouldn't run match m, or "" if it's fine. Used by the pick sheet to ask before assigning. */
+/* Why battery b shouldn't run match m: ran the match right before it, still charging (used within the charge time), low
+   readings (rd: the pre-match reading being logged, else its last check), worn out, or already set for another match. */
+function batConcerns(b,m,rd){
+  const out=[], cfg=battCfg(), t=now(), x=batInfo(b), L=b.label, ms=matchesSorted(), i=ms.findIndex(o=>o.id===m.id), prev=i>0?ms[i-1]:null;
+  const ranIn=o=>o && ((batOfMatch(o)||{}).id===b.id || x.logs.some(r=>r.matchId===o.id));
+  if(ranIn(prev)) out.push(`${L} ran ${mlabel(prev)}, the match right before ${mlabel(m)}. It needs about ${cfg.chargeMin} minutes on the charger between matches.`);
+  else if(x.lastUse && t-x.lastUse<cfg.chargeMin*60000) out.push(`${L} was used ${ago(x.lastUse)} and needs about ${cfg.chargeMin} minutes on the charger. About ${Math.ceil((cfg.chargeMin*60000-(t-x.lastUse))/60000)} min to go.`);
+  const r=rd||((x.last&&x.last.kind!=="post"&&(x.last.at||0)>=x.lastUse)?x.last:null);
+  if(r && ((numOr(r.v)!=null&&r.v<cfg.vMin) || (numOr(r.pct)!=null&&r.pct<cfg.pctMin))) out.push(`${rd?"It reads":`It read at its last check`} ${readLine(r)}, below ${cfg.vMin} V or ${cfg.pctMin}%.`);
+  const ir=rd&&numOr(rd.ir)!=null? rd.ir : x.lastIr&&x.lastIr.ir;
+  if(ir!=null && ir>cfg.irRetire) out.push(`Its internal resistance, ${fmtIr(ir)} Ω, is above the ${fmtIr(cfg.irRetire)} Ω retire cutoff.`);
+  if(x.upcoming && x.upcoming.id!==m.id) out.push(`${L} is already set for ${mlabel(x.upcoming)}.`);
+  return out;
+}
+/* The question to confirm before setting b for match m, or "" if it's fine. Used by Pick battery and the Next battery card. */
 function batUseWarning(b,m){
   if(!b||!m||m.result) return "";
-  const x=batInfo(b), cfg=battCfg(), t=now(), L=b.label, tail=` Use it for ${mlabel(m)} anyway?`;
-  if(x.ready==="charge"){
-    const ran=matchesSorted().filter(o=>o.id!==m.id&&(batOfMatch(o)||{}).id===b.id&&(o.result||(o.time&&effTime(o)<=t))).pop();
-    const used=x.last&&(x.last.kind==="post"||(x.last.at||0)<x.lastUse);
-    if(used) return (ran?`${L} ran ${mlabel(ran)} and hasn't been charged since.`:`${L} was used in a match and hasn't been charged since.`)+" Log an off-charger check once it's charged."+tail;
-    return `${L} was below ${cfg.vMin} V or ${cfg.pctMin}% at its last check.`+tail;
-  }
-  if(x.ready==="no") return `${L} has ${fmtIr(x.lastIr&&x.lastIr.ir)} Ω internal resistance, above the ${fmtIr(cfg.irRetire)} Ω retire cutoff.`+tail;
-  if(x.ready==="assigned"&&x.upcoming&&x.upcoming.id!==m.id) return `${L} is already set for ${mlabel(x.upcoming)}. It will stay set for that match too, with no time to charge in between.`+tail;
-  return "";
+  const cs=batConcerns(b,m,null); return cs.length? cs.join(" ")+` Use it for ${mlabel(m)} anyway?` : "";
 }
 function batPickSheet(matchId){
   const m=S.matches[matchId]; if(!m) return;
@@ -4188,7 +4201,7 @@ function batPickSheet(matchId){
   const order={ready:0,assigned:1,charge:2,none:3,no:4};
   bats.sort((a,c)=>(order[a.ready]??5)-(order[c.ready]??5)||(sug.findIndex(s=>s.b.id===a.b.id)-sug.findIndex(s=>s.b.id===c.b.id)));
   openSheet({title:"Battery for "+mlabel(m), body:`<div class="form">
-      ${sug[0]?`<div class="notice">Best choice: <b>${esc(sug[0].b.label)}</b> · ${BGRADE[sug[0].grade]} · ${readLine(sug[0].last)}</div>`:`<div class="notice warn">No battery is fully ready. Pick one anyway, or log an off-charger check first.</div>`}
+      ${sug[0]?`<div class="notice">Best choice: <b>${esc(sug[0].b.label)}</b> · ${BGRADE[sug[0].grade]} · ${readLine(sug[0].last)}</div>`:`<div class="notice warn">No battery is fully ready. Pick one anyway, or wait until one has had its charge time since its last match.</div>`}
       <ul class="mlist">${bats.map(x=>`<li><button class="bpick ${cur&&cur.id===x.b.id?"on":""}" data-pick="${x.b.id}"><span class="blabel sm">${esc(x.b.label)}</span><span class="mid"><span class="row" style="gap:6px">${gradePill(x.grade)}${readyPill(x)}</span><span class="mono" style="font-size:14px">${readLine(x.last)}</span>${x.ready!=="ready"?`<span class="muted" style="font-size:13.5px">${esc(x.why)}</span>`:""}</span>${cur&&cur.id===x.b.id?`<span class="pill brand">Current</span>`:""}</button></li>`).join("")}</ul></div>`,
     foot:`${cur?`<button class="btn ghost left" data-s="clear">Clear battery</button>`:""}<button class="btn" data-close>Close</button>`,
     onMount(el){ el.addEventListener("click",e=>{ const p=e.target.closest("[data-pick]");
@@ -4204,7 +4217,7 @@ function batDetail(id){
       <div class="row">${gradePill(x.grade)}${readyPill(x)}<span class="muted">${esc(x.why)}</span></div>
       <div class="stats">
         <div class="stat"><div class="v">${x.uses}</div><div class="k">Matches</div></div>
-        <div class="stat"><div class="v">${x.cycles}</div><div class="k">Charges logged</div></div>
+        <div class="stat"><div class="v">${x.logs.length}</div><div class="k">Checks logged</div></div>
         <div class="stat"><div class="v" style="font-size:30px;line-height:40px">${x.avgDrop!=null?x.avgDrop.toFixed(2)+" V":"–"}</div><div class="k">Avg drop per match</div></div>
         <div class="stat"><div class="v" style="font-size:30px;line-height:40px">${fmtIr(x.lastIr&&x.lastIr.ir)}</div><div class="k">Latest Ω</div></div></div>
       ${b.brand||b.purchased||b.notes?`<p class="muted">${[b.brand,b.purchased?"In service since "+b.purchased+" ("+ageText(b.purchased)+")":""].filter(Boolean).map(esc).join(" · ")}${b.notes?`<br>${esc(b.notes)}`:""}</p>`:""}
@@ -4225,21 +4238,23 @@ function batDetail(id){
 function batCfgSheet(){
   const c=battCfg();
   openSheet({title:"Battery grade cutoffs", body:`<div class="form">
-      <p>Grades come from the latest internal resistance reading. A battery is <b>Ready</b> when its last check came after its last match and meets the voltage and charge minimums.</p>
+      <p>Grades come from the latest internal resistance reading. After a match a battery is <b>Charging</b> for the charge time below, then <b>Ready</b>. A pre-match check below the voltage or charge minimum asks before the battery is used.</p>
       <div class="grid2"><label class="field"><span>Good up to (Ω)</span><input type="text" inputmode="decimal" id="bc-good" value="${c.irGood}"><small>Above this is Watch.</small></label>
       <label class="field"><span>Retire above (Ω)</span><input type="text" inputmode="decimal" id="bc-ret" value="${c.irRetire}"><small>Above this, don't use in matches.</small></label></div>
       <div class="grid2"><label class="field"><span>Ready at or above (V)</span><input type="text" inputmode="decimal" id="bc-v" value="${c.vMin}"></label>
       <label class="field"><span>Ready at or above (charge %)</span><input type="text" inputmode="decimal" id="bc-pct" value="${c.pctMin}"></label></div>
-      <div class="notice">Defaults: Good up to ${BATT_DEF.irGood} Ω, retire above ${BATT_DEF.irRetire} Ω, ready at ${BATT_DEF.vMin} V and ${BATT_DEF.pctMin}%. These are common FRC starting points for 12 V 18 Ah batteries; tune them to your fleet.</div></div>`,
+      <label class="field"><span>Charge time after a match (minutes)</span><input type="text" inputmode="numeric" id="bc-chg" value="${c.chargeMin}"><small>How long a battery is on the charger before it's ready again. Using it sooner asks first.</small></label>
+      <div class="notice">Defaults: Good up to ${BATT_DEF.irGood} Ω, retire above ${BATT_DEF.irRetire} Ω, ready at ${BATT_DEF.vMin} V and ${BATT_DEF.pctMin}%, ${BATT_DEF.chargeMin} minutes to charge. These are common FRC starting points for 12 V 18 Ah batteries; tune them to your fleet.</div></div>`,
     foot:`<button class="btn ghost left" data-s="reset">Use defaults</button><button class="btn" data-close>Cancel</button><button class="btn primary" data-s="save">Save cutoffs</button>`,
     onMount(el){ el.addEventListener("click",e=>{
-      if(e.target.closest('[data-s="reset"]')){ el.querySelector("#bc-good").value=BATT_DEF.irGood; el.querySelector("#bc-ret").value=BATT_DEF.irRetire; el.querySelector("#bc-v").value=BATT_DEF.vMin; el.querySelector("#bc-pct").value=BATT_DEF.pctMin; return; }
+      if(e.target.closest('[data-s="reset"]')){ el.querySelector("#bc-good").value=BATT_DEF.irGood; el.querySelector("#bc-ret").value=BATT_DEF.irRetire; el.querySelector("#bc-v").value=BATT_DEF.vMin; el.querySelector("#bc-pct").value=BATT_DEF.pctMin; el.querySelector("#bc-chg").value=BATT_DEF.chargeMin; return; }
       if(!e.target.closest('[data-s="save"]')) return;
-      const g=parseIr(val(el,"bc-good")), r=parseIr(val(el,"bc-ret")), v=parseNum(val(el,"bc-v")), p=parseNum(val(el,"bc-pct"));
+      const g=parseIr(val(el,"bc-good")), r=parseIr(val(el,"bc-ret")), v=parseNum(val(el,"bc-v")), p=parseNum(val(el,"bc-pct")), ch=parseNum(val(el,"bc-chg"));
       if(g==null||r==null||g>=r){ toast("The retire cutoff must be higher than the Good cutoff.","bad"); return; }
       if(v==null||v<10||v>14){ toast("Enter a ready voltage between 10 and 14 V.","bad"); return; }
       if(p==null||p<0||p>100){ toast("Enter a charge percent from 0 to 100.","bad"); return; }
-      saveSettings({batt:Object.assign({}, settings().batt||{}, {irGood:g,irRetire:r,vMin:v,pctMin:p})}); closeSheet(); toast("Cutoffs saved"); }); } });
+      if(ch==null||ch<5||ch>600){ toast("Enter a charge time from 5 to 600 minutes.","bad"); return; }
+      saveSettings({batt:Object.assign({}, settings().batt||{}, {irGood:g,irRetire:r,vMin:v,pctMin:p,chargeMin:Math.round(ch)})}); closeSheet(); toast("Cutoffs saved"); }); } });
 }
 
 /* ---- labels: design editor + PDF ----
@@ -4605,7 +4620,8 @@ document.addEventListener("click", async e=>{
     case "bat-new": batEditSheet(); break;
     case "bat-open": batDetail(id); break;
     case "bat-log": batLogSheet(id||null, b.dataset.kind||null, b.dataset.match||null); break;
-    case "bat-assign": if(b.dataset.match) assignBattery(b.dataset.match,id); break;
+    case "bat-assign": { const m=S.matches[b.dataset.match], bt=S.batteries[id]; if(!m||!bt) break; const w=batUseWarning(bt,m);
+      if(!w || await confirmBox(w,"Use anyway")) assignBattery(m.id,id); break; }
     case "bat-pick": batPickSheet(b.dataset.match); break;
     case "bat-cfg": batCfgSheet(); break;
     case "bat-labels": batLabelsSheet(); break;
