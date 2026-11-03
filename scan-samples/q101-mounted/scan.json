@@ -1,0 +1,451 @@
+{
+  "match": "Q101",
+  "sheet": "R3CK-v3",
+  "downloadedAt": "2026-11-03T05:23:14.073Z",
+  "photos": [
+    {
+      "file": "page-01.jpg",
+      "page": "1",
+      "takenAt": "2026-11-03T05:11:47.810Z",
+      "via": "camera",
+      "read": {
+        "page": "1",
+        "warn": "lineup"
+      }
+    },
+    {
+      "file": "page-01-try2.jpg",
+      "page": "1",
+      "takenAt": "2026-11-03T05:11:56.741Z",
+      "via": "camera",
+      "read": {
+        "page": "1",
+        "warn": "lineup"
+      }
+    },
+    {
+      "file": "page-01-try3.jpg",
+      "page": "1",
+      "takenAt": "2026-11-03T05:12:14.275Z",
+      "via": "camera",
+      "read": {
+        "page": "1",
+        "warn": "lineup"
+      }
+    },
+    {
+      "file": "page-01-try4.jpg",
+      "page": "1",
+      "takenAt": "2026-11-03T05:13:32.480Z",
+      "via": "camera",
+      "read": {
+        "page": "1",
+        "warn": "lineup"
+      }
+    },
+    {
+      "file": "page-01-try5.jpg",
+      "page": "1",
+      "takenAt": "2026-11-03T05:13:59.990Z",
+      "via": "camera",
+      "read": {
+        "page": "1",
+        "read": {
+          "1.1": "blank",
+          "1.2": "blank",
+          "1.3": "done",
+          "1.4": "done",
+          "1.5": "done",
+          "1.6": "unclear",
+          "1.7": "unclear",
+          "1.8": "unclear",
+          "1.9": "done",
+          "1.10": "blank"
+        }
+      }
+    },
+    {
+      "file": "page-02.jpg",
+      "page": "2",
+      "takenAt": "2026-11-03T05:15:13.141Z",
+      "via": "camera",
+      "read": {
+        "page": "2",
+        "read": {
+          "2.1": "blank",
+          "2.1a": "blank",
+          "2.2": "blank",
+          "2.3": "blank",
+          "2.4": "blank",
+          "2.5": "blank",
+          "2.6": "blank",
+          "2.7": "blank",
+          "2.7a": "blank"
+        }
+      }
+    },
+    {
+      "file": "page-03.jpg",
+      "page": "3",
+      "takenAt": "2026-11-03T05:15:38.419Z",
+      "via": "camera",
+      "read": {
+        "page": "3",
+        "read": {
+          "3.1": "blank",
+          "3.1a": "blank",
+          "3.2": "blank",
+          "3.3": "blank"
+        }
+      }
+    },
+    {
+      "file": "page-04.jpg",
+      "page": "4",
+      "takenAt": "2026-11-03T05:16:56.488Z",
+      "via": "camera",
+      "read": {
+        "page": "4",
+        "read": {
+          "4.1": "blank",
+          "4.2": "blank",
+          "4.3": "blank",
+          "4.4": "blank",
+          "4.5": "blank",
+          "4.6": "blank",
+          "4.7": "blank",
+          "4.8": "blank",
+          "4.9": "blank",
+          "4.10": "blank",
+          "4.11": "blank",
+          "4.12": "blank",
+          "4.13": "blank",
+          "4.14": "blank",
+          "4.15": "blank",
+          "4.16": "blank",
+          "4.17": "blank",
+          "4.18": "blank",
+          "4.19": "blank",
+          "4.20": "blank"
+        }
+      }
+    },
+    {
+      "file": "page-04-try2.jpg",
+      "page": "4",
+      "takenAt": "2026-11-03T05:19:13.515Z",
+      "via": "camera",
+      "read": {
+        "page": "4",
+        "read": {
+          "4.1": "blank",
+          "4.2": "blank",
+          "4.3": "blank",
+          "4.4": "blank",
+          "4.5": "blank",
+          "4.6": "blank",
+          "4.7": "blank",
+          "4.8": "blank",
+          "4.9": "blank",
+          "4.10": "blank",
+          "4.11": "blank",
+          "4.12": "blank",
+          "4.13": "blank",
+          "4.14": "blank",
+          "4.15": "blank",
+          "4.16": "blank",
+          "4.17": "blank",
+          "4.18": "blank",
+          "4.19": "blank",
+          "4.20": "blank"
+        }
+      }
+    },
+    {
+      "file": "page-05.jpg",
+      "page": "5",
+      "takenAt": "2026-11-03T05:19:37.298Z",
+      "via": "camera",
+      "read": {
+        "page": "5",
+        "warn": "lineup"
+      }
+    },
+    {
+      "file": "page-05-try2.jpg",
+      "page": "5",
+      "takenAt": "2026-11-03T05:19:43.055Z",
+      "via": "camera",
+      "read": {
+        "page": "5",
+        "warn": "lineup"
+      }
+    },
+    {
+      "file": "page-05-try3.jpg",
+      "page": "5",
+      "takenAt": "2026-11-03T05:19:44.711Z",
+      "via": "camera",
+      "read": {
+        "page": "5",
+        "warn": "lineup"
+      }
+    },
+    {
+      "file": "page-05-try4.jpg",
+      "page": "5",
+      "takenAt": "2026-11-03T05:19:47.945Z",
+      "via": "camera",
+      "read": {
+        "page": "5",
+        "warn": "lineup"
+      }
+    },
+    {
+      "file": "page-05-try5.jpg",
+      "page": "5",
+      "takenAt": "2026-11-03T05:19:50.888Z",
+      "via": "camera",
+      "read": {
+        "page": "5",
+        "warn": "lineup"
+      }
+    },
+    {
+      "file": "page-05-try6.jpg",
+      "page": "5",
+      "takenAt": "2026-11-03T05:19:52.707Z",
+      "via": "camera",
+      "read": {
+        "page": "5",
+        "warn": "lineup"
+      }
+    },
+    {
+      "file": "page-05-try7.jpg",
+      "page": "5",
+      "takenAt": "2026-11-03T05:20:13.271Z",
+      "via": "camera",
+      "read": {
+        "page": "5",
+        "warn": "lineup"
+      }
+    },
+    {
+      "file": "page-06.jpg",
+      "page": "6",
+      "takenAt": "2026-11-03T05:20:43.231Z",
+      "via": "camera",
+      "read": {
+        "page": "6",
+        "read": {
+          "6.1": "done",
+          "6.2": "done",
+          "6.3": "done",
+          "6.4": "done",
+          "6.5": "done",
+          "6.6": "unclear",
+          "6.7": "done",
+          "6.8": "done",
+          "6.9": "done",
+          "6.10": "done",
+          "6.11": "done",
+          "6.12": "done",
+          "6.13": "unclear",
+          "6.14": "done",
+          "6.15": "done"
+        }
+      }
+    },
+    {
+      "file": "page-07.jpg",
+      "page": "7",
+      "takenAt": "2026-11-03T05:21:02.704Z",
+      "via": "camera",
+      "read": {
+        "page": "7",
+        "warn": "lineup"
+      }
+    },
+    {
+      "file": "page-07-try2.jpg",
+      "page": "7",
+      "takenAt": "2026-11-03T05:21:03.812Z",
+      "via": "camera",
+      "read": {
+        "page": "7",
+        "warn": "lineup"
+      }
+    },
+    {
+      "file": "page-07-try3.jpg",
+      "page": "7",
+      "takenAt": "2026-11-03T05:21:05.071Z",
+      "via": "camera",
+      "read": {
+        "page": "7",
+        "warn": "lineup"
+      }
+    },
+    {
+      "file": "page-08.jpg",
+      "page": "8",
+      "takenAt": "2026-11-03T05:21:16.135Z",
+      "via": "camera",
+      "read": {
+        "page": "8",
+        "warn": "lineup"
+      }
+    },
+    {
+      "file": "page-08-try2.jpg",
+      "page": "8",
+      "takenAt": "2026-11-03T05:21:17.397Z",
+      "via": "camera",
+      "read": {
+        "page": "8",
+        "read": {
+          "8.1": "done",
+          "8.2": "done",
+          "8.3": "done",
+          "8.4": "done",
+          "8.5": "unclear",
+          "8.6": "unclear",
+          "8.7": "unclear",
+          "8.8": "done",
+          "8.9": "done",
+          "8.10": "done",
+          "8.11": "done",
+          "8.12": "done",
+          "8.13": "done",
+          "8.14": "done",
+          "8.15": "done",
+          "8.16": "done",
+          "8.17": "done",
+          "8.18": "unclear",
+          "8.19": "unclear",
+          "8.20": "unclear",
+          "8.21": "done",
+          "8.22": "done"
+        }
+      }
+    },
+    {
+      "file": "page-09.jpg",
+      "page": "9",
+      "takenAt": "2026-11-03T05:21:41.202Z",
+      "via": "camera",
+      "read": {
+        "page": "9",
+        "warn": "lineup"
+      }
+    },
+    {
+      "file": "page-09-try2.jpg",
+      "page": "9",
+      "takenAt": "2026-11-03T05:21:43.016Z",
+      "via": "camera",
+      "read": {
+        "page": "9",
+        "warn": "lineup"
+      }
+    },
+    {
+      "file": "page-10.jpg",
+      "page": "10",
+      "takenAt": "2026-11-03T05:22:09.444Z",
+      "via": "camera",
+      "read": {
+        "page": "10",
+        "read": {
+          "10.1": "unclear",
+          "10.2": "unclear",
+          "10.3": "unclear",
+          "10.4": "unclear",
+          "10.5": "unclear",
+          "10.6": "unclear",
+          "10.7": "blank",
+          "10.8": "blank",
+          "10.9": "unclear",
+          "10.10": "blank",
+          "10.11": "blank",
+          "10.12": "done",
+          "10.13": "done",
+          "10.14": "blank",
+          "10.15": "blank",
+          "10.16": "blank",
+          "10.17": "unclear",
+          "10.18": "blank",
+          "10.19": "unclear",
+          "10.20": "unclear",
+          "10.21": "unclear",
+          "10.22": "done",
+          "10.23": "done",
+          "10.24": "done"
+        }
+      }
+    },
+    {
+      "file": "page-11.jpg",
+      "page": "11",
+      "takenAt": "2026-11-03T05:22:31.029Z",
+      "via": "camera",
+      "read": {
+        "page": "11",
+        "read": {
+          "11.1": "done",
+          "11.2": "done",
+          "11.3": "done",
+          "11.4": "done",
+          "11.5": "unclear",
+          "11.6": "done",
+          "11.7": "unclear",
+          "11.8": "done",
+          "11.9": "done",
+          "11.10": "done",
+          "11.11": "done",
+          "11.12": "done",
+          "11.13": "done",
+          "11.14": "done",
+          "11.15": "done",
+          "11.16": "done",
+          "11.17": "unclear",
+          "11.18": "unclear",
+          "11.19": "done",
+          "11.20": "done",
+          "11.21": "done",
+          "11.22": "done"
+        }
+      }
+    },
+    {
+      "file": "page-12.jpg",
+      "page": "12",
+      "takenAt": "2026-11-03T05:22:54.978Z",
+      "via": "camera",
+      "read": {
+        "page": "12",
+        "warn": "lineup"
+      }
+    },
+    {
+      "file": "page-12-try2.jpg",
+      "page": "12",
+      "takenAt": "2026-11-03T05:23:00.020Z",
+      "via": "camera",
+      "read": {
+        "page": "12",
+        "read": {
+          "12.1": "unclear",
+          "12.2": "unclear",
+          "12.3": "done",
+          "12.4": "done",
+          "12.5": "unclear",
+          "12.6": "unclear",
+          "12.7": "done",
+          "12.8": "done"
+        }
+      }
+    }
+  ]
+}
