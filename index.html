@@ -214,6 +214,32 @@ button.tile:hover{border-color:var(--brand)}
 .count.d .v{color:var(--ok)} .count.m .v{color:var(--bad)} .count.u .v{color:var(--warn)}
 .sumgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;align-items:start}
 .sumgrid > *{min-width:0}
+.ckstrip{display:grid;grid-template-columns:1fr auto;gap:8px 16px;align-items:center;padding:12px 16px;margin-bottom:12px}
+.cks-l{display:flex;align-items:center;gap:10px 16px;flex-wrap:wrap;min-width:0}
+.cks-run{width:auto;max-width:100%;min-height:52px;font-family:var(--f-display);font-weight:700;font-size:22px}
+.cks-l .verdict{font-size:20px;padding:6px 12px}
+.cks-bar{flex:1 1 200px;min-width:160px}
+.cks-c{font-size:16px;color:var(--ink-2);white-space:nowrap} .cks-c b{font-family:var(--f-mono);font-size:20px;margin-right:2px;color:var(--ink)}
+.cks-c.d b{color:var(--ok)} .cks-c.m b{color:var(--bad)} .cks-c.u b{color:var(--warn)}
+.cks-r{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.cks-note{grid-column:1/-1;font-size:14px;color:var(--ink-3)} .cks-warn{color:var(--warn);font-weight:600}
+/* the board uses the wall screen's full width */
+main:has(.ckboard){max-width:none}
+.ckboard{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;align-items:stretch}
+.cktile{padding:12px 14px;display:grid;gap:8px;align-content:start;border-top:5px solid var(--line);cursor:pointer;min-width:0}
+.cktile.ok{border-top-color:var(--ok)} .cktile.bad{border-top-color:var(--bad)} .cktile.warn{border-top-color:var(--warn)} .cktile.app{border-top-color:var(--brand)}
+.ckt-h{display:flex;align-items:baseline;gap:8px;min-width:0} .ckt-h .no{font-family:var(--f-mono);color:var(--brand-ink);font-weight:700}
+.ckt-h b{font-size:17px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap} .ckt-h .who{margin-left:auto;color:var(--ink-3);white-space:nowrap}
+.ckt-s{font-weight:600;font-size:15px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;color:var(--ink-2)} .ckt-s svg{width:18px;height:18px}
+.cktile.ok .ckt-s{color:var(--ok)} .cktile.bad .ckt-s{color:var(--bad)} .cktile.warn .ckt-s{color:var(--warn)}
+.ckt-l{list-style:none;margin:0;padding:0;display:grid;gap:2px;font-size:14.5px}
+.ckt-l li{white-space:nowrap;overflow:hidden;text-overflow:ellipsis} .ckt-l .no{font-family:var(--f-mono);color:var(--ink-3);margin-right:6px} .ckt-l .more{color:var(--ink-3)}
+.ckt-l li.unclear .no{color:var(--warn)} .ckt-l .star svg{width:14px;height:14px;color:var(--warn);margin-right:4px;vertical-align:-2px}
+.ckt-a{display:flex;gap:6px;margin-top:auto} .ckt-a .btn{flex:1;min-height:48px}
+.cksh-c{margin:8px 0 4px;font-size:15px} .cksh-h{font-size:19px;margin:16px 0 8px}
+.cksh-l{padding:0}
+.ckmore{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px}
+@media (max-width:760px){ .ckstrip{grid-template-columns:1fr} .cks-r{justify-content:stretch} .cks-r .btn{flex:1 1 auto} .ckboard{grid-template-columns:1fr} }
 .panel{padding:16px 18px;display:grid;gap:12px;align-content:start}
 .panel h3{font-size:22px;display:flex;align-items:center;gap:8px}
 .attn{list-style:none;margin:0;padding:0;display:grid;gap:8px}
@@ -1324,44 +1350,97 @@ function paintStatus(){
     body.innerHTML=`<div class="card empty"><h3>No match checklist started</h3><p>Start a checklist for the next match. Students mark the laminated sheets with dry-erase marker, you scan the pages in, then they wipe them clean for the next match.</p><button class="btn primary" data-act="new-run">${ICON.plus}Start match checklist</button></div>`; return;
   }
   const rs=runState(run);
-  let h=`<div class="toolbar">
-    <label class="sr" for="ck-run">Match checklist</label>
-    <select id="ck-run">${runs.map(r=>{ const x=runState(r); return `<option value="${r.id}" ${r.id===run.id?"selected":""}>${esc(r.label)} · ${x?(x.verified?"verified":x.pct+"%"):"checklist deleted"} · ${fmtDay(r.createdAt)}</option>`; }).join("")}</select>
-    <button class="btn" data-act="new-run">${ICON.plus}New</button>
-    ${rs?`<button class="btn primary" data-act="scan">${ICON.camera}Scan sheets</button>`:""}
-    ${rs?(()=>{ const n=scanPicsCount(runPicT(run)); return `<button class="btn" data-act="scan-pics" data-id="${run.id}" ${n?"":`disabled title="Scan photos are kept on the device that took them, until the page is closed"`}>${ICON.image}Download photos (${n})</button>`; })():""}
-    ${rs&&(rs.c.done||rs.c.missing||rs.c.unclear)?`<button class="btn" data-act="reset-run">Reset checks</button>`:""}
-    <button class="btn ghost" data-act="del-runs">${ICON.trash}Delete old checklists</button>
+  if(!rs){ body.innerHTML=`<div class="toolbar">${ckRunSelect(runs,run)}<button class="btn" data-act="new-run">${ICON.plus}New</button><button class="btn ghost" data-act="del-runs">${ICON.trash}Delete old checklists</button></div><div class="notice bad">The checklist this match used has been deleted. Start a new match checklist.</div>`; return; }
+  const scans=runScans(run), asg=runAssign(run), nPics=scanPicsCount(runPicT(run));
+  const appItems=rs.items.filter(x=>x.it.mode==="app"||x.it.mode==="both"), lamV=lamVersion(rs.cl);
+  const lamNote=lamV&&lamV<(rs.cl.version||1)?`The laminated sheets are version ${lamV}; the checklist is now version ${rs.cl.version}. Reprint from Build &amp; print and re-laminate.`:!lamV&&rs.N.printedCount?`Sheets not printed from this board yet. Print them once from Build &amp; print.`:"";
+  /* One strip: which match, how far along, and what to do next. Everything else is in More. */
+  let h=`<div class="card ckstrip">
+    <div class="cks-l">${ckRunSelect(runs,run)}${rs.verified?`<span class="verdict ok">${ICON.check}Verified</span>`:""}
+      <div class="cks-bar">${sbar(rs.c)}</div>
+      <span class="cks-c d"><b>${rs.c.done}</b> done</span><span class="cks-c m"><b>${rs.c.missing}</b> missing</span><span class="cks-c u"><b>${rs.c.unclear}</b> unclear</span><span class="cks-c"><b>${rs.c.pending}</b> not checked</span></div>
+    <div class="cks-r"><button class="btn primary" data-act="scan">${ICON.camera}Scan sheets</button><button class="btn" data-act="scan-pics" data-id="${run.id}" ${nPics?"":`disabled title="Scan photos are kept on the device that took them, until the page is closed"`}>${ICON.image}Download photos (${nPics})</button><button class="btn" data-act="ck-more">More</button></div>
+    <div class="cks-note">${esc(rs.cl.year+" "+rs.cl.name)} v${rs.cl.version||1} · started ${ago(run.createdAt)} by ${esc(whoOf(run))}${lamNote?` · <span class="cks-warn">${lamNote}</span>`:""}${!scans.length&&rs.N.printedCount?` · Students mark ${rs.N.printedCount} items on the sheets; scan the pages when they're done, then wipe them clean.`:""}</div>
   </div>`;
-  if(!rs){ body.innerHTML=h+`<div class="notice bad">The checklist this match used has been deleted. Start a new match checklist.</div>`; return; }
-  const scans=runScans(run);
   const lr=ui.lastReset&&ui.lastReset.runId===run.id&&now()-ui.lastReset.at<120000?ui.lastReset:null;
   if(lr) h+=`<div class="notice resetnote"><span>${esc(lr.what)} reset. ${lr.n} item${lr.n===1?"":"s"} went back to “Not checked yet”.</span><button class="btn sm" data-act="undo-reset">Undo reset</button></div>`;
-  const att=rs.items.filter(x=>x.st==="missing"||x.st==="unclear").sort((a,b)=>(b.it.priority?1:0)-(a.it.priority?1:0)||(a.st==="missing"?0:1)-(b.st==="missing"?0:1));
-  const appItems=rs.items.filter(x=>x.it.mode==="app"||x.it.mode==="both");
-  const lamV=lamVersion(rs.cl), vers="";
-  h+=`<div class="card hero">
-    <div class="hero-top"><span class="verdict ${rs.verified?"ok":"no"}">${rs.verified?ICON.check+"Verified":esc(run.label)+" · "+rs.pct+"%"}</span>
-      <span class="muted">${esc(rs.cl.year+" "+rs.cl.name)} v${rs.cl.version||1}${vers} · started ${ago(run.createdAt)} by ${esc(whoOf(run))}</span></div>
-    ${sbar(rs.c)}
-    <div class="counts"><div class="count d"><div class="v">${rs.c.done}</div><div class="k">Done</div></div><div class="count m"><div class="v">${rs.c.missing}</div><div class="k">Missing on paper</div></div><div class="count u"><div class="v">${rs.c.unclear}</div><div class="k">Unclear on scan</div></div><div class="count"><div class="v">${rs.c.pending}</div><div class="k">Not checked yet</div></div></div>
-    ${lamV&&lamV<(rs.cl.version||1)?`<div class="notice warn">The laminated sheets are version ${lamV}; the checklist is now version ${rs.cl.version}. Scans still work, but changed items aren't on the sheets. Reprint from Build &amp; print and re-laminate.</div>`:!lamV&&rs.N.printedCount?`<div class="notice warn">The laminated sheets haven't been printed from this board yet. Print them once from Build &amp; print.</div>`:""}
-    ${!scans.length&&rs.N.printedCount?`<div class="notice">Students mark ${rs.N.printedCount} items on the laminated sheets. Scan the pages when they're done (you pick the match while scanning), then wipe them clean.</div>`:""}
-  </div><div class="sumgrid">`;
-  const asg=runAssign(run), asecs=rs.secs.filter(s=>s.c.total), nAs=asecs.filter(s=>asg[s.sec.id]).length;
-  h+=`<div class="card panel"><h3>Who checks what ${asecs.length?`<span class="pill ${nAs===asecs.length?"ok":""}">${nAs}/${asecs.length}</span>`:""}</h3><ul class="tlist aslist">${asecs.map(s=>`<li><span class="nm1">${s.sNo?`<span class="no">${s.sNo}</span>`:`<span class="no">App</span>`}${esc(s.sec.name)}</span><span class="r ${asg[s.sec.id]?"asn":""}">${esc(asg[s.sec.id]||"Not assigned")}</span></li>`).join("")}</ul><p class="muted" style="font-size:14px">Same people every match. Set them in Build &amp; print.</p><div class="row"><button class="btn sm" data-act="edit-assign" data-id="${rs.cl.id}">${ICON.edit}Change who checks</button></div></div>`;
-  h+=`<div class="card panel"><h3>Needs attention ${att.length?`<span class="pill bad">${att.length}</span>`:""}</h3>${att.length?`<ul class="attn">${att.map(x=>`<li class="arow ${x.st}"><span class="t">${x.no?`<span class="no">${x.no}</span>`:""}${x.it.priority?`<span class="star" title="Priority">${ICON.starf}</span> `:""}<span class="txt">${fmtItem(x.it.text)}</span><span class="sec">${esc(x.sec.name)}${asg[x.sec.id]?" · "+esc(asg[x.sec.id]):""} · ${x.st==="missing"?"left blank on paper":"couldn't read the mark"}</span></span>
-      <span class="acts"><button class="btn" data-act="verify" data-id="${x.id}">${ICON.check}Verified</button><button class="btn" data-act="flag" data-id="${x.id}">Problem</button></span>${x.st==="unclear"||x.st==="missing"?scanPeek(run,x):""}</li>`).join("")}</ul>`
-      :`<p class="muted">${scans.length?"Nothing left blank or unclear on the scanned sheets.":"Results show up here after the paper sheet is scanned."}</p>`}</div>`;
-  h+=`<div class="card panel"><h3>Your app checks ${appItems.length?`<span class="pill brand">${appItems.filter(x=>x.st==="done").length}/${appItems.length}</span>`:""}</h3>${appItems.length?`<div class="attn">${appItems.map(x=>`<button class="tick ${x.st==="done"?"done":""}" data-act="tick" data-id="${x.id}" aria-pressed="${x.st==="done"}"><span class="box">${x.st==="done"?ICON.check:""}</span><span class="txt">${x.it.priority?`<span class="star">${ICON.starf}</span> `:""}${fmtItem(x.it.text)}</span><span class="by">${esc(x.sec.name)}${x.it.mode==="both"?" · also on paper":""}${x.c?` · ${esc(whoOf(x.c))} ${ago(x.c.at)}`:""}</span></button>`).join("")}</div>`
-      :`<p class="muted">No items are set to be checked in the app. In the builder, set an item to “App only” or “Paper + app” to check it here.</p>`}</div>`;
-  h+=`<div class="card panel" style="grid-column:1/-1"><h3>By section</h3><div class="legend"><span><i style="background:var(--ok)"></i>Done</span><span><i style="background:var(--bad)"></i>Missing</span><span><i style="background:var(--warn)"></i>Unclear</span><span><i style="background:var(--surface-2);border:1px solid var(--line)"></i>Not checked yet</span></div><div class="secs">${rs.secs.filter(s=>s.c.total).map(s=>`<details data-sid="${s.sec.id}" ${ui.openSecs.has(s.sec.id)?"open":""}><summary><span class="nm1">${s.sNo?`<span class="no">${s.sNo}</span>`:""}${esc(s.sec.name)}${asg[s.sec.id]?` <span class="asw">· ${esc(asg[s.sec.id])}</span>`:""}</span>${sbar(s.c)}<span class="n">${s.c.done}/${s.c.total}</span></summary>
-      <ul class="ilist">${s.its.map(x=>x.head?`<li class="ihead">${esc(x.it.text)}</li>`:`<li class="irow ${x.st} ${x.it.type==="sub"?"sub":""}"><span class="st">${x.st==="done"?ICON.check:x.st==="missing"?ICON.x:x.st==="unclear"?ICON.q:""}</span><span class="no">${x.no||"app"}</span><span class="txt">${fmtItem(x.it.text)}${(x.st==="unclear"||x.st==="missing")&&scanPic(run,x)?` <button class="btn ghost peeklink" data-act="peek" data-id="${x.id}">${ICON.image}See scan</button>`:""}${x.c&&x.c.via==="verified"?` <span class="muted" style="font-size:13px">· verified by ${esc(whoOf(x.c))}</span>`:""}</span>${x.st==="done"&&x.c&&x.c.via!=="scan"?`<button class="btn ghost" data-act="unverify" data-id="${x.id}">Undo</button>`:x.st!=="done"?`<button class="btn ghost" data-act="verify" data-id="${x.id}">Mark done</button>`:"<span></span>"}</li>`).join("")}</ul>${s.c.done||s.c.missing||s.c.unclear?`<div class="secreset"><button class="btn sm ghost" data-act="reset-sec" data-id="${s.sec.id}">Reset ${esc(s.sec.name)}</button></div>`:""}</details>`).join("")}</div></div>`;
-  const flags=run.flags||{}, flagged=Object.keys(flags).map(id=>({r:rs.N.byId[id],rid:flags[id]})).filter(x=>x.r);
-  h+=`<div class="card panel"><h3>Sheet scans</h3>${run.resetAt?`<p class="muted" style="font-size:14px">Checks were reset ${fmtClock(run.resetAt)}${ago(run.resetAt)?" ("+ago(run.resetAt)+")":""}. Earlier scans are hidden.</p>`:""}${scans.length?`<ul class="tlist">${scans.map(x=>`<li><span class="nm1">${fmtClock(x.at)} · ${esc(whoOf(x))}${x.sheet?" · sheet "+esc(x.sheet):""}</span><span class="r">${x.done||0} done · ${x.blank||0} blank${x.unclear?` · ${x.unclear} unclear`:""}</span></li>`).join("")}</ul>`:`<p class="muted">No scans yet for ${esc(run.label)}.</p>`}<div class="row"><button class="btn sm primary" data-act="scan">${ICON.camera}Scan sheets</button></div></div>`;
-  h+=`<div class="card panel"><h3>Problems logged</h3>${flagged.length?`<ul class="tlist">${flagged.map(f=>{const r=S.repairs[f.rid]; return `<li><span class="nm1">${esc(f.r.sec.name)}: ${esc(f.r.it.text)}</span><span class="r">${r?esc(STATUS[r.status]||"Open"):""}</span></li>`;}).join("")}</ul><button class="btn sm" data-go="repairs">Open repairs</button>`:`<p class="muted">None. Use “Problem” on a missing item to log a repair.</p>`}</div>`;
-  h+=`</div>`;
+  /* One tile per section: who checks it, how it went, and the first few items that need a look */
+  const flags=run.flags||{};
+  h+=`<div class="ckboard">${rs.secs.filter(s=>s.c.total).map(s=>{
+    const its=s.its.filter(x=>!x.head), att=ckAtt(its), c=s.c, nf=its.filter(x=>flags[x.id]).length;
+    const cls=c.done===c.total?"ok":!att.length?"":c.missing===c.total?"bad":"warn";
+    const st=c.done===c.total?`${ICON.check}All ${c.total} done`
+      :!att.length?(c.done?`${c.done} of ${c.total} done · ${c.pending} not checked yet`:`Not checked yet · ${c.total}`)
+      :c.missing===c.total?`Whole page left blank · ${c.total}`:`${att.length} need${att.length===1?"s":""} attention`;
+    const list=cls==="warn"?`<ul class="ckt-l">${att.slice(0,3).map(x=>`<li class="${x.st}">${x.no?`<span class="no">${x.no}</span>`:""}${x.it.priority?`<span class="star">${ICON.starf}</span>`:""}${fmtItem(x.it.text)}</li>`).join("")}${att.length>3?`<li class="more">+${att.length-3} more</li>`:""}</ul>`:"";
+    return `<div class="card cktile ${cls}" data-act="ck-sec" data-id="${s.sec.id}">
+      <div class="ckt-h"><span class="no">${s.sNo||"App"}</span><b>${esc(s.sec.name)}</b><span class="who">${esc(asg[s.sec.id]||"Not assigned")}</span></div>
+      ${sbar(c)}<div class="ckt-s">${st}${nf?` <span class="pill bad">${nf} problem${nf===1?"":"s"}</span>`:""}</div>${list}
+      <div class="ckt-a"><button class="btn sm" data-act="ck-verify-sec" data-id="${s.sec.id}" ${c.done===c.total?`disabled title="Everything in ${esc(s.sec.name)} is done"`:""}>${ICON.check}Verify all</button><button class="btn sm" data-act="ck-sec" data-id="${s.sec.id}">Open</button></div></div>`; }).join("")}
+    ${appItems.length?(()=>{ const d=appItems.filter(x=>x.st==="done").length; return `<div class="card cktile app ${d===appItems.length?"ok":""}" data-act="ck-app">
+      <div class="ckt-h"><span class="no">App</span><b>Your app checks</b></div><div class="ckt-s">${d===appItems.length?ICON.check:""}${d} of ${appItems.length} done</div>
+      <div class="ckt-a"><button class="btn sm" data-act="ck-app">Open</button></div></div>`; })():""}</div>`;
   body.innerHTML=h;
+}
+function ckRunSelect(runs,run){ return `<label class="sr" for="ck-run">Match checklist</label><select id="ck-run" class="cks-run">${runs.map(r=>{ const x=runState(r); return `<option value="${r.id}" ${r.id===run.id?"selected":""}>${esc(r.label)} · ${x?(x.verified?"verified":x.pct+"%"):"checklist deleted"} · ${fmtDay(r.createdAt)}</option>`; }).join("")}</select>`; }
+/* items that need a look: left blank or unclear on the scan; priority items first, then blank before unclear */
+const ckAtt=its=>its.filter(x=>x.st==="missing"||x.st==="unclear").sort((a,b)=>(b.it.priority?1:0)-(a.it.priority?1:0)||(a.st==="missing"?0:1)-(b.st==="missing"?0:1));
+/* items in a section that aren't done yet: left blank, unclear, or not checked yet */
+const ckTodo=its=>its.filter(x=>x.st!=="done");
+/* Verify every item in a section that isn't done yet (the person checked the robot themselves) */
+async function ckVerifySec(secId){
+  const run=activeRun(), rs=run&&runState(run), s=rs&&rs.secs.find(x=>x.sec.id===secId); if(!s) return;
+  const att=ckTodo(s.its.filter(x=>!x.head)); if(!att.length){ toast("Everything in "+s.sec.name+" is done"); return; }
+  if(!(await confirmBox(`Mark ${att.length===1?"the 1":"all "+att.length} ${s.sec.name} item${att.length===1?"":"s"} that ${att.length===1?"isn't":"aren't"} done yet on ${run.label} as verified? Only do this once you've checked ${att.length===1?"it":"them"} on the robot.`,`Verify all ${att.length}`))) return;
+  const patch={}; att.forEach(x=>{ patch[x.id]=stamp({via:"verified"}); });
+  if(write("runs",run.id,"update",{checks:patch})) toast(`${s.sec.name}: ${att.length} marked done`);
+}
+/* One section in full: what needs a look first (with the scanned row), then every item */
+function ckSecSheet(secId){
+  const paint=el=>{ const run=activeRun(), rs=run&&runState(run), s=rs&&rs.secs.find(x=>x.sec.id===secId); if(!s){ closeSheet(); return; }
+    const its=s.its.filter(x=>!x.head), att=ckAtt(its), asg=runAssign(run), any=s.c.done||s.c.missing||s.c.unclear;
+    el.querySelector("#sheet-title").textContent=`${s.sNo?s.sNo+" ":""}${s.sec.name}${asg[s.sec.id]?" · "+asg[s.sec.id]:""}`;
+    el.querySelector(".sheet-body").innerHTML=`${sbar(s.c)}<p class="muted cksh-c">${s.c.done} done · ${s.c.missing} left blank · ${s.c.unclear} unclear · ${s.c.pending} not checked yet</p>
+      ${att.length?`<h3 class="cksh-h">Needs attention</h3><ul class="attn">${att.map(x=>`<li class="arow ${x.st}"><span class="t">${x.no?`<span class="no">${x.no}</span>`:""}${x.it.priority?`<span class="star" title="Priority">${ICON.starf}</span> `:""}<span class="txt">${fmtItem(x.it.text)}</span><span class="sec">${x.st==="missing"?"left blank on paper":"couldn't read the mark"}</span></span>
+        <span class="acts"><button class="btn" data-act="verify" data-id="${x.id}">${ICON.check}Verified</button><button class="btn" data-act="flag" data-id="${x.id}">Problem</button></span>${scanPeek(run,x)}</li>`).join("")}</ul>`:""}
+      <h3 class="cksh-h">All ${its.length} items</h3><ul class="ilist cksh-l">${s.its.map(x=>x.head?`<li class="ihead">${esc(x.it.text)}</li>`:`<li class="irow ${x.st} ${x.it.type==="sub"?"sub":""}"><span class="st">${x.st==="done"?ICON.check:x.st==="missing"?ICON.x:x.st==="unclear"?ICON.q:""}</span><span class="no">${x.no||"app"}</span><span class="txt">${fmtItem(x.it.text)}${x.c&&x.c.via==="verified"?` <span class="muted" style="font-size:13px">· verified by ${esc(whoOf(x.c))}</span>`:""}</span>${x.st==="done"&&x.c&&x.c.via!=="scan"?`<button class="btn ghost" data-act="unverify" data-id="${x.id}">Undo</button>`:x.st!=="done"?`<button class="btn ghost" data-act="verify" data-id="${x.id}">Mark done</button>`:"<span></span>"}</li>`).join("")}</ul>`;
+    el.querySelector(".sheet-foot").innerHTML=`<button class="btn" data-close>Close</button>${any?`<button class="btn" data-act="reset-sec" data-id="${secId}">Reset section</button>`:""}${s.c.done<s.c.total?`<button class="btn primary" data-act="ck-verify-sec" data-id="${secId}">${ICON.check}Verify all ${s.c.total-s.c.done}</button>`:""}`; };
+  openSheet({title:"", body:"", foot:" ", onMount(el){ paint(el);
+    el.addEventListener("click",e=>{ const b=e.target.closest("[data-act]"); if(!b) return; e.stopPropagation();   /* the page's own handler must not act on it too (the button is redrawn) */
+      const a=b.dataset.act, id=b.dataset.id;
+      if(a==="verify"){ setCheck(id,true,"verified"); toast("Marked done"); paint(el); }
+      else if(a==="unverify"){ setCheck(id,false); paint(el); }
+      else if(a==="peek") peekScan(id,()=>ckSecSheet(secId));
+      else if(a==="flag") ckFlag(id);
+      else if(a==="reset-sec") resetRun(id);
+      else if(a==="ck-verify-sec") ckVerifySec(id); }); } });
+}
+function ckFlag(id){ const run=activeRun(), rs=run&&runState(run), r=rs&&rs.N.byId[id]; if(!r) return;
+  const rid=run.flags&&run.flags[id]; if(rid && S.repairs[rid]){ repairSheet(rid); return; }
+  repairSheet(null,{title:r.it.text.replace(/\s+/g," "), subsystem:r.sec.name, found:run.label, runId:run.id, itemId:id}); }
+/* The items checked here in the app (not on paper) */
+function ckAppSheet(){
+  const paint=el=>{ const run=activeRun(), rs=run&&runState(run); if(!rs){ closeSheet(); return; }
+    const app=rs.items.filter(x=>x.it.mode==="app"||x.it.mode==="both");
+    el.querySelector(".sheet-body").innerHTML=`<div class="attn">${app.map(x=>`<button class="tick ${x.st==="done"?"done":""}" data-act="tick" data-id="${x.id}" aria-pressed="${x.st==="done"}"><span class="box">${x.st==="done"?ICON.check:""}</span><span class="txt">${x.it.priority?`<span class="star">${ICON.starf}</span> `:""}${fmtItem(x.it.text)}</span><span class="by">${esc(x.sec.name)}${x.it.mode==="both"?" · also on paper":""}${x.c?` · ${esc(whoOf(x.c))} ${ago(x.c.at)}`:""}</span></button>`).join("")}</div>`; };
+  openSheet({title:"Your app checks", body:"", foot:`<button class="btn primary" data-close>Done</button>`, onMount(el){ paint(el);
+    el.addEventListener("click",e=>{ const b=e.target.closest("[data-act=tick]"); if(!b) return; e.stopPropagation(); const run=activeRun(); if(!run) return; const id=b.dataset.id, on=run.checks&&run.checks[id]; setCheck(id,!on,"app"); paint(el); }); } });
+}
+/* Everything that isn't needed every match: new checklist, who checks what, scans, problems, reset, delete */
+function ckMoreSheet(){
+  const run=activeRun(), rs=run&&runState(run); if(!rs) return;
+  const scans=runScans(run), flags=run.flags||{}, flagged=Object.keys(flags).map(id=>({r:rs.N.byId[id],rid:flags[id]})).filter(x=>x.r), any=rs.c.done||rs.c.missing||rs.c.unclear;
+  openSheet({title:run.label, body:`<div class="ckmore">
+      <button class="btn" data-m="new">${ICON.plus}New match checklist</button>
+      <button class="btn" data-m="who">${ICON.edit}Change who checks</button>
+      ${any?`<button class="btn" data-m="reset">Reset checks</button>`:""}
+      <button class="btn" data-m="del">${ICON.trash}Delete old checklists</button></div>
+    <h3 class="cksh-h">Sheet scans</h3>${run.resetAt?`<p class="muted" style="font-size:14px">Checks were reset ${fmtClock(run.resetAt)}${ago(run.resetAt)?" ("+ago(run.resetAt)+")":""}. Earlier scans are hidden.</p>`:""}${scans.length?`<ul class="tlist">${scans.map(x=>`<li><span class="nm1">${fmtClock(x.at)} · ${esc(whoOf(x))}${x.sheet?" · sheet "+esc(x.sheet):""}</span><span class="r">${x.done||0} done · ${x.blank||0} blank${x.unclear?` · ${x.unclear} unclear`:""}</span></li>`).join("")}</ul>`:`<p class="muted">No scans yet for ${esc(run.label)}.</p>`}
+    <h3 class="cksh-h">Problems logged</h3>${flagged.length?`<ul class="tlist">${flagged.map(f=>{const r=S.repairs[f.rid]; return `<li><span class="nm1">${esc(f.r.sec.name)}: ${esc(f.r.it.text)}</span><span class="r">${r?esc(STATUS[r.status]||"Open"):""}</span></li>`;}).join("")}</ul><div class="row"><button class="btn sm" data-m="repairs">Open repairs</button></div>`:`<p class="muted">None. Use “Problem” on a missing item to log a repair.</p>`}`,
+    foot:`<button class="btn" data-close>Close</button>`,
+    onMount(el){ el.addEventListener("click",e=>{ const b=e.target.closest("[data-m]"); if(!b) return; const m=b.dataset.m; closeSheet();
+      if(m==="new") newRunSheet(); else if(m==="del") delRunsSheet(); else if(m==="reset") resetRun(null); else if(m==="repairs") go("repairs");
+      else if(m==="who"){ openEditor(rs.cl.id); setTimeout(()=>{ const f=document.querySelector('input[data-ed="sassign"]'); if(f){ f.scrollIntoView({block:"center"}); if(window.matchMedia("(min-width:760px)").matches) f.focus(); } },60); } }); } });
 }
 function setActiveRun(id){ saveSettings({activeRunId:id}); }
 /* Scanned page photos for items that need attention (unclear or left blank). runs/{id}.pics = {sectionNo: {id (asset), url, w, h, at}}; runs/{id}.pos = {itemId: y (0 top to 1 bottom of that photo)} */
@@ -1427,11 +1506,14 @@ function rowFit(c,hit,L,page,px0,px1){
   f.xm=(xa+xb)/2;   /* the strip these lines were measured in (photo x) */
   return f;
 }
-function peekScan(id){
+/* back: what to show when this closes (the section the item is in), unless a repair is being logged */
+function peekScan(id,back){
   const run=activeRun(), rs=run&&runState(run), x=rs&&rs.items.find(i=>i.id===id), p=x&&scanPic(run,x); if(!p){ toast("No scanned photo for this item."); return; }
+  let leaving=false;
   openSheet({title:`${x.no?x.no+" · ":""}${String(x.it.text).replace(/\s+/g," ")}`, body:`<div class="peekwrap"><img src="${esc(p.src)}" alt="Scanned page with item ${esc(x.no||"")}"><span class="peekmark" hidden style="top:${((p.y!=null?p.y:0)*100).toFixed(1)}%"></span></div>
       <p class="muted" id="peek-note">Finding ${esc(x.no||"this item")} on the page…</p>`,
-    foot:`<button class="btn" data-close>Close</button><button class="btn" data-s="flag">Problem</button><button class="btn primary" data-s="ok">${ICON.check}Mark done</button>`,
+    foot:`<button class="btn" data-close>${back?"Back":"Close"}</button><button class="btn" data-s="flag">Problem</button><button class="btn primary" data-s="ok">${ICON.check}Mark done</button>`,
+    onClose:()=>{ if(back && !leaving) setTimeout(back,0); },
     onMount(el){
       const img=el.querySelector(".peekwrap img"), mk=el.querySelector(".peekmark");
       const note=el.querySelector("#peek-note"), what=esc(x.no||"this item");
@@ -1462,9 +1544,10 @@ function peekScan(id){
         if(placed || p.y!=null){ mk.hidden=false; mk.scrollIntoView({block:"center"}); }
         if(note) note.innerHTML=placed?`The blue band marks ${what}. Decide from the photo, or check the robot.`:p.y!=null?`The blue band marks roughly where the reader found ${what}. Decide from the photo, or check the robot.`:`Look for ${what} on the page. Decide from the photo, or check the robot.`;
       },{once:true});
-      el.addEventListener("click",e=>{ const b=e.target.closest("[data-s]"); if(!b) return; closeSheet();
-        if(b.dataset.s==="ok"){ setCheck(id,true,"verified"); toast("Marked done"); }
-        else { const rid=run.flags&&run.flags[id]; if(rid && S.repairs[rid]) repairSheet(rid); else repairSheet(null,{title:String(x.it.text).replace(/\s+/g," "), subsystem:x.sec.name, found:run.label, runId:run.id, itemId:id}); } }); } });
+      el.addEventListener("click",e=>{ const b=e.target.closest("[data-s]"); if(!b) return;
+        if(b.dataset.s==="ok"){ setCheck(id,true,"verified"); toast("Marked done"); closeSheet(); return; }
+        leaving=true; closeSheet();   /* Problem: the repair form opens; don't jump back over it */
+        { const rid=run.flags&&run.flags[id]; if(rid && S.repairs[rid]) repairSheet(rid); else repairSheet(null,{title:String(x.it.text).replace(/\s+/g," "), subsystem:x.sec.name, found:run.label, runId:run.id, itemId:id}); } }); } });
 }
 /* scans of a match checklist since its last reset (runs/{id}.resetAt) */
 const runScans = run => Object.values(S.scans).filter(x=>x.runId===run.id && (x.at||0)>(run.resetAt||0)).sort((a,b)=>b.at-a.at);
@@ -4656,6 +4739,10 @@ document.addEventListener("click", async e=>{
     case "new-run": newRunSheet(); break;
     case "del-runs": delRunsSheet(); break;
     case "peek": peekScan(id); break;
+    case "ck-sec": ckSecSheet(id); break;
+    case "ck-app": ckAppSheet(); break;
+    case "ck-verify-sec": ckVerifySec(id); break;
+    case "ck-more": ckMoreSheet(); break;
     case "reset-run": resetRun(null); break;
     case "reset-sec": resetRun(id); break;
     case "undo-reset": undoReset(); break;
