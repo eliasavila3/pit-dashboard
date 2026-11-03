@@ -1410,7 +1410,7 @@ function ckSecSheet(secId){
       const a=b.dataset.act, id=b.dataset.id;
       if(a==="verify"){ setCheck(id,true,"verified"); toast("Marked done"); paint(el); }
       else if(a==="unverify"){ setCheck(id,false); paint(el); }
-      else if(a==="peek") peekScan(id);
+      else if(a==="peek") peekScan(id,()=>ckSecSheet(secId));
       else if(a==="flag") ckFlag(id);
       else if(a==="reset-sec") resetRun(id);
       else if(a==="ck-verify-sec") ckVerifySec(id); }); } });
@@ -1506,11 +1506,14 @@ function rowFit(c,hit,L,page,px0,px1){
   f.xm=(xa+xb)/2;   /* the strip these lines were measured in (photo x) */
   return f;
 }
-function peekScan(id){
+/* back: what to show when this closes (the section the item is in), unless a repair is being logged */
+function peekScan(id,back){
   const run=activeRun(), rs=run&&runState(run), x=rs&&rs.items.find(i=>i.id===id), p=x&&scanPic(run,x); if(!p){ toast("No scanned photo for this item."); return; }
+  let leaving=false;
   openSheet({title:`${x.no?x.no+" · ":""}${String(x.it.text).replace(/\s+/g," ")}`, body:`<div class="peekwrap"><img src="${esc(p.src)}" alt="Scanned page with item ${esc(x.no||"")}"><span class="peekmark" hidden style="top:${((p.y!=null?p.y:0)*100).toFixed(1)}%"></span></div>
       <p class="muted" id="peek-note">Finding ${esc(x.no||"this item")} on the page…</p>`,
-    foot:`<button class="btn" data-close>Close</button><button class="btn" data-s="flag">Problem</button><button class="btn primary" data-s="ok">${ICON.check}Mark done</button>`,
+    foot:`<button class="btn" data-close>${back?"Back":"Close"}</button><button class="btn" data-s="flag">Problem</button><button class="btn primary" data-s="ok">${ICON.check}Mark done</button>`,
+    onClose:()=>{ if(back && !leaving) setTimeout(back,0); },
     onMount(el){
       const img=el.querySelector(".peekwrap img"), mk=el.querySelector(".peekmark");
       const note=el.querySelector("#peek-note"), what=esc(x.no||"this item");
@@ -1541,9 +1544,10 @@ function peekScan(id){
         if(placed || p.y!=null){ mk.hidden=false; mk.scrollIntoView({block:"center"}); }
         if(note) note.innerHTML=placed?`The blue band marks ${what}. Decide from the photo, or check the robot.`:p.y!=null?`The blue band marks roughly where the reader found ${what}. Decide from the photo, or check the robot.`:`Look for ${what} on the page. Decide from the photo, or check the robot.`;
       },{once:true});
-      el.addEventListener("click",e=>{ const b=e.target.closest("[data-s]"); if(!b) return; closeSheet();
-        if(b.dataset.s==="ok"){ setCheck(id,true,"verified"); toast("Marked done"); }
-        else { const rid=run.flags&&run.flags[id]; if(rid && S.repairs[rid]) repairSheet(rid); else repairSheet(null,{title:String(x.it.text).replace(/\s+/g," "), subsystem:x.sec.name, found:run.label, runId:run.id, itemId:id}); } }); } });
+      el.addEventListener("click",e=>{ const b=e.target.closest("[data-s]"); if(!b) return;
+        if(b.dataset.s==="ok"){ setCheck(id,true,"verified"); toast("Marked done"); closeSheet(); return; }
+        leaving=true; closeSheet();   /* Problem: the repair form opens; don't jump back over it */
+        { const rid=run.flags&&run.flags[id]; if(rid && S.repairs[rid]) repairSheet(rid); else repairSheet(null,{title:String(x.it.text).replace(/\s+/g," "), subsystem:x.sec.name, found:run.label, runId:run.id, itemId:id}); } }); } });
 }
 /* scans of a match checklist since its last reset (runs/{id}.resetAt) */
 const runScans = run => Object.values(S.scans).filter(x=>x.runId===run.id && (x.at||0)>(run.resetAt||0)).sort((a,b)=>b.at-a.at);
