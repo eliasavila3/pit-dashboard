@@ -2532,7 +2532,7 @@ async function qsDecodeBlob(blob){ /* page code on a photo, or null */
    A page's QR code says which page it is and where the page sits in the photo. The page layout comes from the same code that
    prints the PDF, so every checkbox's place on the page is known. Starting next to the code, each printed box is found in the
    photo and the fit is corrected as boxes are found (tilt, curl); then the marker inside each box is measured. */
-const MARK={ink:0.3, done:0.06, doneLost:0.3, doneBetween:0.15, edgeDone:0.8, tipIn:0.2, tipOut:0.08, blank:0.02, glare:0.3, edge:0.28, score:0.12, found:0.5};   /* tuned on test photos; see readPageLocal */
+const MARK={ink:0.3, done:0.06, doneLost:0.3, doneBetween:0.15, edgeDone:0.8, tipIn:0.2, tipOut:0.08, blank:0.02, glare:0.3, edge:0.28, score:0.12, inkedScore:0.15, found:0.5};   /* tuned on test photos; see readPageLocal */
 function polyfit(xs,ys,deg){   /* least squares y = c0 + c1 x + c2 x^2 (deg 0..2) */
   const n=deg+1, M=Array.from({length:n},()=>new Array(n+1).fill(0));
   xs.forEach((x,i)=>{ const p=[1,x,x*x]; for(let r=0;r<n;r++){ for(let c=0;c<n;c++) M[r][c]+=p[r]*p[c]; M[r][n]+=p[r]*ys[i]; } });
@@ -2574,10 +2574,11 @@ function boxFit(I,cx,cy,a,b,inked){   /* inked: don't count marker inside the bo
   const pa=[a[0]/la,a[1]/la], pb=[b[0]/lb,b[1]/lb], at=(x,y)=>{ x=Math.round(x); y=Math.round(y); return x<0||y<0||x>=W||y>=H?-1:D[y*W+x]; };
   const S=12; let edges=[1,1,1,1], ring=0, inner=0;
   const side=(k,sx,sy,f)=>{ /* side k of the square scaled by f: centre offset (sx,sy) in half-sides */
-    const ux=k<2?a:b, perp=k<2?pb:pa; let sum=0;
+    const ux=k<2?a:b, perp=k<2?pb:pa; let sum=0; const outer=inked && f>1 && k<2? [] : null;
     for(let i=0;i<S;i++){ const t=-0.85+1.7*i/(S-1), x=cx+f*(sx*a[0]+sy*b[0])+t*f*ux[0], y=cy+f*(sx*a[1]+sy*b[1])+t*f*ux[1];
-      if(f!==1){ const v=at(x,y); if(v<0) return -1; sum+=v; continue; }
+      if(f!==1){ const v=at(x,y); if(v<0) return -1; sum+=v; if(outer) outer.push(v); continue; }
       const v0=at(x,y), v1=at(x-perp[0],y-perp[1]), v2=at(x+perp[0],y+perp[1]); if(v0<0||v1<0||v2<0) return -1; sum+=Math.max(v0,v1,v2); }
+    if(outer){ outer.sort((p,q)=>p-q); const n=Math.round(S*2/3); return outer.slice(0,n).reduce((p,q)=>p+q,0)/n; }   /* marked box: a stroke down the column, crossing just above or below it, doesn't count against it */
     return sum/S; };
   const g=Math.max(3/Math.min(la,lb),0.22), SIDES=[[0,-1],[0,1],[-1,0],[1,0]];   /* top, bottom (run along a); left, right (run along b) */
   for(let k=0;k<4;k++){ const [sx,sy]=SIDES[k], e=side(k,sx,sy,1), o=side(k,sx,sy,1+g), n=side(k,sx,sy,1-g); if(e<0||o<0||n<0) return null; edges[k]=e; ring+=o/4; inner+=n/4; }
@@ -2625,16 +2626,19 @@ function followRule(I,start,dir,ppt){
       best.v-=Math.max(side(g),side(-g)); }
     return best; };
   let b=peak(start,Math.round(12*ppt)); if(!b || b.v<0.35) return null;
-  const pts=[b.p]; let p=b.p, miss=0;
+  const pts=[b.p], vs=[b.v]; let p=b.p, miss=0;
+  /* Once the line is established, a fainter stretch (out of focus at the far edge of the photo, a reflection) still counts
+     if it's at least half as dark as the line so far. */
+  const need=()=>pts.length<4?0.35:Math.max(0.2,Math.min(0.35,0.5*vs.reduce((a,b)=>a+b,0)/vs.length));
   for(let i=0;i<80 && miss<2;i++){
     const q=[p[0]-15*ppt*d[0], p[1]-15*ppt*d[1]], c=peak(q,Math.max(4,Math.round(3*ppt)));
-    if(!c || c.v<0.35){ miss++; p=q; continue; }
-    miss=0; p=c.p; pts.push(p);
+    if(!c || c.v<need()){ miss++; p=q; continue; }
+    miss=0; p=c.p; pts.push(p); vs.push(c.v);
     if(pts.length>=3){ const f=pts[0], l=pts[pts.length-1], L=Math.hypot(f[0]-l[0],f[1]-l[1]); d=[(f[0]-l[0])/L,(f[1]-l[1])/L]; }   /* keep to the line found so far */
   }
   if(pts.length<6) return null;
   let e=pts[pts.length-1];   /* walk to the exact end */
-  for(let i=0;i<Math.round(20*ppt);i++){ const q=[e[0]-d[0],e[1]-d[1]], c=peak(q,2); if(!c || c.v<0.3) break; e=c.p; }
+  const ve=Math.min(0.3,need()); for(let i=0;i<Math.round(20*ppt);i++){ const q=[e[0]-d[0],e[1]-d[1]], c=peak(q,2); if(!c || c.v<ve) break; e=c.p; }
   return {end:e, dir:d, len:Math.hypot(pts[0][0]-e[0],pts[0][1]-e[1])};
 }
 function boxSearch(I,px,py,a,b,w,inked){   /* best square near (px,py), within w pixels: every 2 px, then every pixel around the best */
@@ -2660,10 +2664,12 @@ function boxInk(I,cx,cy,a,b){
     if(Math.abs(s)<=k && Math.abs(t)<=k){ tot++; if(dark){ ink++; if(C[p]) inkC++; } else if(G[p]) glare++; }
     else { const sd=Math.abs(s)>=Math.abs(t)?(s<0?0:1):(t<0?2:3); en[sd]++; if(dark && C[p]) es[sd]++; } }
   const edge=Math.max(...es.map((v,i)=>en[i]?v/en[i]:0));
-  let out=0, otot=0; const no=Math.max(8,Math.round(n*0.9));
+  let out=0, otot=0; const no=Math.max(8,Math.round(n*0.9)), os=[0,0,0,0], on=[0,0,0,0];   /* left, right, top, bottom of the ring just outside */
   for(let i=0;i<no;i++) for(let j=0;j<no;j++){ const s=1.8*(-1+2*(i+0.5)/no), t=1.8*(-1+2*(j+0.5)/no); if(Math.max(Math.abs(s),Math.abs(t))<1.15) continue;
-    const x=Math.round(cx+s*a[0]+t*b[0]), y=Math.round(cy+s*a[1]+t*b[1]); if(x<0||y<0||x>=W||y>=H) continue; otot++; if(D[y*W+x]>=I.ink) out++; }
-  return tot?{ink:ink/tot, inkC:inkC/tot, glare:glare/tot, edge, out:otot?out/otot:0}:{ink:0,inkC:0,glare:1,edge:0,out:0};
+    const x=Math.round(cx+s*a[0]+t*b[0]), y=Math.round(cy+s*a[1]+t*b[1]); if(x<0||y<0||x>=W||y>=H) continue; const sd=Math.abs(s)>=Math.abs(t)?(s<0?0:1):(t<0?2:3), dk=D[y*W+x]>=I.ink;
+    otot++; on[sd]++; if(dk){ out++; os[sd]++; } }
+  const of=os.map((v,i)=>on[i]?v/on[i]:0), through=(of[2]>=0.08&&of[3]>=0.08)||(of[0]>=0.08&&of[1]>=0.08);   /* marker outside on opposite sides: a line through the box, not a tip */
+  return tot?{ink:ink/tot, inkC:inkC/tot, glare:glare/tot, edge, out:otot?out/otot:0, through}:{ink:0,inkC:0,glare:1,edge:0,out:0,through:false};
 }
 let jsQrLib=null;
 function loadJsQr(){
@@ -2725,39 +2731,72 @@ async function readPageLocal(blob,cl,N,L){
      looked for at its own size and angle at that spot, close enough to its predicted place that a neighbour can't be mistaken for it. */
   const Q=CL_QR_BOX, base=[[Q.x,Q.y,...q.tl,2],[Q.x+Q.s,Q.y,...q.tr,2],[Q.x,Q.y+Q.s,...q.bl,2]].concat(q.br?[[Q.x+Q.s,Q.y+Q.s,...q.br,1]]:[]).concat(anchored?[[SB.x,SB.y,blk.x,blk.y,4]]:[]).concat(rule?[[RULE.x0,RULE.y,...rule.end,3]]:[]);
   let map0=(u,v)=>{ const p=at0(u,v,skv); return [p[0]+sx,p[1]+sy]; };
+  const map0P=map0;   /* the page model from the anchors alone, before the whole column is fitted */
   /* Lining up the rows from the section block. Its centre is only roughly known (a solid block with a number in it), and the
      code, across the page, can be a little off on a bowed or angled page, so the row spacing, the column's angle and a small
      shift are found together: whatever lines up the printed outlines of the first rows best (marker inside a box doesn't count
      against it). With the start pinned to the block, being a row out can't fit: spacing that put row 1 on row 2's box would
      miss the rows below it. */
-  let lx=ex;
+  let lx=ex, colFit=false;
   if(rule){ const kr=rule.len/((500-RULE.x0)*Math.hypot(...ex)); if(kr>0.7 && kr<1.4) lx=[rule.dir[0]*Math.hypot(...ex)*kr, rule.dir[1]*Math.hypot(...ex)*kr]; }
   if(anchored){
     const top=rows.slice(0,8), E=Math.hypot(...ey), e1=[ey[0]/E,ey[1]/E];
     const vOf=(k,th)=>{ const cs=Math.cos(th), sn=Math.sin(th); return [(e1[0]*cs-e1[1]*sn)*E*k,(e1[0]*sn+e1[1]*cs)*E*k]; };
-    const fit=(v,dx,dy)=>{ let t=0; for(const r of top){ const h=r.s/2, x=blk.x+dx+(r.x-SB.x)*lx[0]+(r.y-SB.y)*v[0], y=blk.y+dy+(r.x-SB.x)*lx[1]+(r.y-SB.y)*v[1];
-      const m=boxFit(I,x,y,[lx[0]*h,lx[1]*h],[v[0]*h,v[1]*h],true); t+=m?Math.max(-0.3,Math.min(1,m.score)):-0.3; } return t; };
+    /* Coarse grid first, on the first four rows (short enough that a rough angle and spacing still land near each box), each
+       allowed a couple of pixels off so a thin outline isn't stepped over; then all eight rows, exactly. */
+    const fit=(v,dx,dy,tol)=>{ let t=0; for(const r of tol?top.slice(0,4):top){ const h=r.s/2, x=blk.x+dx+(r.x-SB.x)*lx[0]+(r.y-SB.y)*v[0], y=blk.y+dy+(r.x-SB.x)*lx[1]+(r.y-SB.y)*v[1]; let bm=-0.3;
+      for(const oy of tol?[-2,0,2]:[0]) for(const ox of tol?[-2,0,2]:[0]){ const m=boxFit(I,x+ox,y+oy,[lx[0]*h,lx[1]*h],[v[0]*h,v[1]*h],true); if(m && m.score>bm) bm=Math.min(1,m.score); } t+=bm; } return t; };
     let best=null; const S=Math.round(Math.max(6,6*ppt));
-    const tryAll=(ks,ths,sx0,sy0,R,st)=>{ for(const k of ks) for(const th of ths){ const v=vOf(k,th);
-      for(let dy=sy0-R;dy<=sy0+R;dy+=st) for(let dx=sx0-R;dx<=sx0+R;dx+=st){ const t=fit(v,dx,dy); if(!best||t>best.t) best={t,k,th,dx,dy,v}; } } };
+    const tryAll=(ks,ths,sx0,sy0,R,st,tol)=>{ for(const k of ks) for(const th of ths){ const v=vOf(k,th);
+      for(let dy=sy0-R;dy<=sy0+R;dy+=st) for(let dx=sx0-R;dx<=sx0+R;dx+=st){ const t=fit(v,dx,dy,tol); if(!best||t>best.t) best={t,k,th,dx,dy,v}; } } };
     const rng=(a,b,st)=>{ const o=[]; for(let x=a;x<=b+1e-9;x+=st) o.push(x); return o; };
-    tryAll(rng(0.7,1.4,0.04),rng(-0.1,0.1,0.05),0,0,S,4);
-    const b0=best; tryAll(rng(b0.k-0.04,b0.k+0.04,0.01),rng(b0.th-0.04,b0.th+0.04,0.02),b0.dx,b0.dy,4,1);
-    if(best && best.t>=0.15*top.length){ const v=best.v, ox=blk.x+best.dx, oy=blk.y+best.dy;
-      map0=(u,w)=>[ox+(u-SB.x)*lx[0]+(w-SB.y)*v[0], oy+(u-SB.x)*lx[1]+(w-SB.y)*v[1]]; } }
+    tryAll(rng(0.85,1.2,0.035),rng(-0.1,0.1,0.05),0,0,S,4,true);   /* scale: the code and the section block already give it closely */
+    const b0=best; best=null; tryAll(rng(b0.k-0.04,b0.k+0.04,0.01),rng(b0.th-0.04,b0.th+0.04,0.02),b0.dx,b0.dy,4,2);
+    const b1=best; tryAll([b1.k],[b1.th],b1.dx,b1.dy,1,1);
+    if(best && best.t>=0.15*top.length){ const ox=blk.x+best.dx, oy=blk.y+best.dy, un=[lx[0]/Math.hypot(...lx),lx[1]/Math.hypot(...lx)];
+      /* Then the whole column at once: spacing, angle, perspective (rows closer together toward the far end of a page seen at
+         an angle) and a gentle bend (along and across the column), kept where the most box outlines line up. Every row votes,
+         so no one box (marked, or under glare) can pull it, and a row out can't fit. */
+      const at=(k,th,c,cv,cu)=>{ const v=vOf(k,th), vn=[v[0]/Math.hypot(...v),v[1]/Math.hypot(...v)];
+        return (u,w)=>{ const d=w-SB.y, z=1/Math.max(0.3,1+c*d), q=(d/400)*(d/400), s=d*z, du=(u-SB.x)*z;
+          return [ox+du*lx[0]+s*v[0]+q*(cv*vn[0]+cu*un[0]), oy+du*lx[1]+s*v[1]+q*(cv*vn[1]+cu*un[1])]; }; };
+      const fitCol=(f,R)=>{ let t=0; for(const r of R||rows){ const p=f(r.x,r.y), pu=f(r.x+1,r.y), pv=f(r.x,r.y+1), h=r.s/2, a=[(pu[0]-p[0])*h,(pu[1]-p[1])*h], b=[(pv[0]-p[0])*h,(pv[1]-p[1])*h]; let bm=-0.3;
+          for(const dy of [-2,0,2]) for(const dx of [-2,0,2]){ const m=boxFit(I,p[0]+dx,p[1]+dy,a,b,true); if(m && m.score>bm) bm=Math.min(1,m.score); } t+=bm; } return t; };
+      let g={k:best.k, th:best.th, c:0, cv:0, cu:0, t:-1e9}; const R=Math.round(0.6*(rows[1]?rows[1].y-rows[0].y:26)*ppt), dm=rows[Math.min(7,rows.length-1)].y-SB.y;
+      const tryG=(o,sub)=>{ const t=fitCol(at(o.k,o.th,o.c,o.cv,o.cu),sub); if(t>g.t) g=Object.assign(o,{t}); };
+      if(rows.length>8){
+        /* Down the column in stages (16 rows, 32, …, all), each searching spacing and angle only as far as moves its last row by
+           half a row from the stage before: rows that land on the next row's boxes further down can never be reached. */
+        const P1=(rows[7].y-rows[0].y)/7;
+        for(let n=8;n<rows.length;){ n=Math.min(rows.length,n*2); const sub=rows.slice(0,n), g0=Object.assign({},g), span=Math.max(1,(sub[n-1].y-SB.y)/P1), d=0.5/span;
+          g.t=-1e9; for(let i=-3;i<=3;i++) for(let j=-3;j<=3;j++) tryG({k:g0.k*(1+d*i/3), th:g0.th+d*j/3, c:0, cv:0, cu:0},sub);
+          const g1=Object.assign({},g); for(let i=-2;i<=2;i++) for(let j=-2;j<=2;j++) if(i||j) tryG({k:g1.k*(1+d*i/7.5), th:g1.th+d*j/7.5, c:0, cv:0, cu:0},sub); }
+        /* then perspective (rows closer together toward the far end), keeping the top rows where they are */
+        const g0=Object.assign({},g); for(let c=-6e-4;c<=6.01e-4;c+=1e-4) if(Math.abs(c)>1e-9) tryG({k:g0.k*(1+c*dm), th:g0.th, c, cv:0, cu:0});
+        const gc=Object.assign({},g); for(let i=-3;i<=3;i++) for(let j=-3;j<=3;j++) if(i||j) tryG({k:gc.k*(1+0.004*i), th:gc.th+0.004*j, c:gc.c, cv:0, cu:0});
+        const g1=Object.assign({},g); for(let cv=-R;cv<=R;cv+=Math.max(2,R/4)) for(let cu=-R;cu<=R;cu+=Math.max(2,R/4)) tryG({k:g1.k, th:g1.th, c:g1.c, cv, cu});
+        const g2=Object.assign({},g); for(const k of [-0.006,-0.003,0,0.003,0.006]) for(const th of [-0.006,-0.003,0,0.003,0.006]) tryG({k:g2.k+k, th:g2.th+th, c:g2.c, cv:g2.cv, cu:g2.cu});
+        colFit=true; } else g.t=0;
+      map0=at(g.k,g.th,g.c,g.cv,g.cu); } }
+  /* Reading the rows, from a starting page model: the whole-column fit (colFit) or the anchors alone. */
+  const readWith=(map0,colFit)=>{
   const pairs=[]; let map=map0;
   /* Following the rows: each next box is predicted from the ones just found above it (the section block counts as the first),
      so the column's own direction and spacing in the photo are used, and every step is short. */
   const seed=anchored?[[SB.x,SB.y,blk.x,blk.y]]:[];
   /* Page model from found boxes: perspective (homFit) plus a smooth correction down the column, fitted to the boxes, for a
      page that isn't quite flat (in a sleeve, on a clipboard). P: [u,v,X,Y] of found boxes. */
-  const fitPage=P=>{ const h=homFit(base.concat(P.map(([u,v,X,Y])=>[u,v,X,Y,3])),c.width,c.height); if(!h) return null;
+  const fitPage=P=>{ const h=colFit? map0 : homFit(base.concat(P.map(([u,v,X,Y])=>[u,v,X,Y,3])),c.width,c.height); if(!h) return null;   /* with the whole column fitted, boxes only correct it */
     const n=P.length, deg=n<4?0:n<8?1:2, vs=P.map(p=>p[1]), rx=P.map(([u,v,X])=>X-h(u,v)[0]), ry=P.map(([u,v,X,Y])=>Y-h(u,v)[1]);
     const fx=polyfit(vs,rx,deg), fy=polyfit(vs,ry,deg); if(!fx||!fy) return h;
     const v0=Math.min(...vs), v1=Math.max(...vs), cl=v=>Math.max(v0,Math.min(v1,v));   /* only where boxes were found; held steady beyond */
     return (u,v)=>{ const p=h(u,v); return [p[0]+fx(cl(v)),p[1]+fy(cl(v))]; }; };
   const refit=()=>{ const n=pairs.length, v0=Math.min(...pairs.map(p=>p[1])), v1=Math.max(...pairs.map(p=>p[1]));
     if(n>=4 && v1-v0>=40){ const h=fitPage(pairs); if(h){ map=h; return; } }
+    if(colFit){   /* the whole column is already fitted: a few boxes only nudge it, never tilt it far beyond where they are */
+      if(!pairs.length) return; const vs=pairs.map(p=>p[1]), v0=Math.min(...vs), v1=Math.max(...vs), deg=pairs.length<3||v1-v0<40?0:1, cl=v=>Math.max(v0,Math.min(v1,v));
+      const fx=polyfit(vs,pairs.map(([u,v,X])=>X-map0(u,v)[0]),deg), fy=polyfit(vs,pairs.map(([u,v,X,Y])=>Y-map0(u,v)[1]),deg);
+      if(fx&&fy) map=(u,v)=>{ const p=map0(u,v); return [p[0]+fx(cl(v)),p[1]+fy(cl(v))]; }; return; }
     const P=seed.concat(pairs), deg=P.length<2?0:1, vs=P.map(p=>p[1]), rx=P.map(([u,v,X])=>X-map0(u,v)[0]), ry=P.map(([u,v,X,Y])=>Y-map0(u,v)[1]);   /* until then: shift, then slope */
     const fx=polyfit(vs,rx,deg), fy=polyfit(vs,ry,deg); if(fx&&fy) map=(u,v)=>{ const p=map0(u,v); return [p[0]+fx(v),p[1]+fy(v)]; }; };
   refit();
@@ -2768,8 +2807,31 @@ async function readPageLocal(blob,cl,N,L){
     const r=rows[i], L=local(r), gap=Math.min(i?r.y-rows[i-1].y:1e9, i+1<rows.length?rows[i+1].y-r.y:1e9, r.s*1.45);
     let m=boxSearch(I,L.p[0],L.p[1],L.a,L.b,Math.max(4,0.45*r.s*L.ppt));
     if(!(m && m.e>=MARK.edge && m.score>=MARK.score)) m=boxSearch(I,L.p[0],L.p[1],L.a,L.b,Math.max(4,Math.min(0.75*r.s,0.33*gap)*L.ppt));   /* a little wider, well short of the next row */
-    if(m && m.e>=MARK.edge && m.score>=MARK.score){ found[r.id]=m; pairs.push([r.x,r.y,m.x,m.y]); refit(); }
+    if(!(m && m.e>=MARK.edge && m.score>=MARK.score)){   /* a marked box: its outline is there, but marker fills the inside. Look again close by, ignoring the inside */
+      const mi=boxSearch(I,L.p[0],L.p[1],L.a,L.b,Math.max(3,0.3*r.s*L.ppt),true); if(mi && mi.e>=MARK.edge && mi.score>=MARK.inkedScore) m=Object.assign(mi,{inked:true}); }
+    if(m && m.e>=MARK.edge && (m.inked || m.score>=MARK.score)){ found[r.id]=m; if(!m.inked){ pairs.push([r.x,r.y,m.x,m.y]); refit(); } }   /* a marked box's match can lean toward its marker: it doesn't steer the rows below */
   }
+  /* Second pass (whole column fitted): a straight correction through every box found, clean or marked, leaving out any that
+     don't agree with the rest; then the boxes still missing are looked for where that puts them. Many boxes together give the
+     column's lean on a page that sits a little crooked, which no single box (pulled by its marker) can steer. */
+  if(colFit){
+    const P=rows.map((r,i)=>found[r.id]?{r,i,m:found[r.id]}:null).filter(Boolean), pitchPx=(rows[1]?rows[1].y-rows[0].y:26)*ppt;
+    if(P.length>=4 && P.length<rows.length){
+      let keep=P, fx=null, fy=null;
+      for(let it=0;it<2;it++){ const vs=keep.map(o=>o.r.y), dx=keep.map(o=>o.m.x-map0(o.r.x,o.r.y)[0]), dy=keep.map(o=>o.m.y-map0(o.r.x,o.r.y)[1]);
+        fx=polyfit(vs,dx,1); fy=polyfit(vs,dy,1); if(!fx||!fy) break;
+        const k2=keep.filter(o=>{ const q=map0(o.r.x,o.r.y); return Math.hypot(q[0]+fx(o.r.y)-o.m.x, q[1]+fy(o.r.y)-o.m.y)<=0.3*pitchPx; }); if(k2.length<4) break; keep=k2; }
+      if(fx&&fy){ const m1=(u,v)=>{ const q=map0(u,v); return [q[0]+fx(v),q[1]+fy(v)]; }; map=m1;
+        for(const r of rows){ if(found[r.id]) continue; const L=local(r);
+          let m=boxSearch(I,L.p[0],L.p[1],L.a,L.b,Math.max(4,0.3*r.s*L.ppt));
+          if(!(m && m.e>=MARK.edge && m.score>=MARK.score)){ const mi=boxSearch(I,L.p[0],L.p[1],L.a,L.b,Math.max(3,0.3*r.s*L.ppt),true); m=mi && mi.e>=MARK.edge && mi.score>=MARK.inkedScore? Object.assign(mi,{inked:true}) : null; }
+          if(m){ found[r.id]=m; if(!m.inked) pairs.push([r.x,r.y,m.x,m.y]); } } } } }
+  /* Reading from the whole-column fit: every row's place is taken as known to well within a row (all rows voted for it), so a
+     box found much further from it than that is a neighbour's box, and its row is left for a person to check. (On a page
+     seen at a steep angle the fit itself can be off; the row-by-row reading covers that, below.) */
+  if(colFit){ const pitchPx=pitch*ppt;
+    for(const r of rows){ const m=found[r.id]; if(!m) continue; const p=map0(r.x,r.y);
+      if(Math.hypot(m.x-p[0],m.y-p[1])>0.4*pitchPx){ delete found[r.id]; const k=pairs.findIndex(x=>x[0]===r.x&&x[1]===r.y); if(k>=0) pairs.splice(k,1); } } }
   /* Cross-check: every box found must sit where all the others say it should. One that doesn't (a neighbour's box taken
      by mistake) is dropped, and its row is left for a person to check. */
   if(pairs.length>=6){ const h=fitPage(pairs);
@@ -2790,22 +2852,61 @@ async function readPageLocal(blob,cl,N,L){
   /* Final check against the page itself: from the boxes found and the code only (leaving out the section block and the
      rule), the section block must come out where it is, within half a row. A model that's a row out (row 1 read from row 2's
      box, and so on) misses it by a whole row, however well the boxes agree among themselves. */
-  if(anchored && pairs.length>=3){ const QB=base.slice(0,q.br?4:3), h=homFit(QB.concat(pairs.map(([u,v,X,Y])=>[u,v,X,Y,3])),c.width,c.height);
+  const seenAt=rows.filter(r=>found[r.id]).map(r=>[r.x,r.y,found[r.id].x,found[r.id].y,3]);   /* every box found, marked ones too */
+  if(anchored && seenAt.length>=3){ const QB=base.slice(0,q.br?4:3), h=homFit(QB.concat(seenAt),c.width,c.height);
     if(h){ const g0=gapOf(0), p=h(SB.x,SB.y), q2=h(SB.x,SB.y+1), unit=Math.hypot(q2[0]-p[0],q2[1]-p[1]);
       if(Math.hypot(p[0]-blk.x,p[1]-blk.y)>0.5*g0*unit) return {warn:"lineup", page:pg.page, steep:false}; } }
-  if(!placed && pairs.length<Math.max(1,Math.ceil(rows.length*MARK.found))){ const t=q.br&&qrTilt([q.tl,q.tr,q.br,q.bl]); return {warn:"lineup", page:pg.page, steep:!!(t&&t.tilt>32)}; }
-  const items=rows.map((r,i)=>{
+  if(!placed && Object.keys(found).length<Math.max(1,Math.ceil(rows.length*MARK.found))){ const t=q.br&&qrTilt([q.tl,q.tr,q.br,q.bl]); return {warn:"lineup", page:pg.page, steep:!!(t&&t.tilt>32)}; }
+  const pos=[], items=rows.map((r,i)=>{
     const m=found[r.id], L=local(r,m?m.f:1), x=m?m.x:L.p[0], y=m?m.y:L.p[1], between=!m && placed && i<hi && (i>lo || anchored);   /* above the first found box, the section block holds it */
-    const k=boxInk(I,x,y,L.a,L.b);
+    const k=boxInk(I,x,y,L.a,L.b); pos[i]=[x,y,L.a,L.b];
     /* A box that wasn't found in the photo: between found boxes its place is known, so coloured marker over it counts (black
        could be the printed outline, a little off); above or below all of them, only a box clearly full of marker counts.
        Anything else there is left for a person to check. */
     /* A little marker in the box with most of the stroke outside it (a tick drawn on the item number, its tip in the box) is
        left for a person to check, not counted as done. */
-    const tip=k.ink>=MARK.done && k.ink<MARK.tipIn && k.out>=MARK.tipOut && k.edge<MARK.edgeDone;
-    const state=!tip && ((m? k.ink>=MARK.done : between? k.inkC>=MARK.doneBetween : k.ink>=MARK.doneLost) || ((m||between) && k.edge>=MARK.edgeDone))?"done" : !m||tip||k.glare>=MARK.glare?"unclear" : k.ink<=MARK.blank?"blank" : "unclear";
+    const tip=k.ink>=MARK.done && k.ink<MARK.tipIn && k.out>=MARK.tipOut && k.edge<MARK.edgeDone && !k.through;
+    /* a box not found in the photo, on a page whose layout passed the check, with its outline showing and no marker or glare
+       in it: blank */
+    const seen=()=>{ for(const dy of [-2,0,2]) for(const dx of [-2,0,2]){ const o=boxFit(I,x+dx,y+dy,L.a,L.b,true); if(o && o.e>=MARK.edge) return true; } return false; };   /* its printed outline shows there (glare can wash out marker and outline alike) */
+    const clear=!m && placed && k.ink<=MARK.blank && k.glare<MARK.glare && k.edge<0.3 && seen();
+    const state=!tip && ((m? k.ink>=MARK.done : between? k.inkC>=MARK.doneBetween : k.ink>=MARK.doneLost) || ((m||between) && k.edge>=MARK.edgeDone))?"done" : (!m&&!clear)||tip||k.glare>=MARK.glare||k.edge>=0.3?"unclear" : k.ink<=MARK.blank?"blank" : "unclear";   /* marker along the box's edge: never blank */
     return {no:r.no, state, y:Math.round(Math.max(0,Math.min(1,y/c.height))*1000)/1000, ink:Math.round(k.ink*1000)/1000};
   });
+  return {page:pg.page, items, pos};
+  };
+  /* Read both ways when the whole column was fitted. The row-by-row reading copes with any angle; the whole-column fit copes
+     with marker over most boxes (a stroke down the column) but can be fooled by a page seen at a steep angle. Where only one
+     reads the page, that one is used; where both do, a row counts only if both looked at the same box and agree (one sure,
+     the other unsure, counts as sure); anything else is left for a person to check. */
+  const done=r=>r.items?{page:r.page, items:r.items}:r;
+  const B=readWith(map0P,false); if(!colFit) return done(B);
+  const A=readWith(map0,true); if(!A.items) return done(B); if(!B.items) return done(A);
+  /* How well each reading's rows sit on printed box outlines (marker inside doesn't count against it). A model that's lost
+     puts rows between boxes; when one reading clearly sits better, it's used on its own. */
+  const onBox=([x,y,a,b])=>{ let bm=-0.3; for(const dy of [-2,0,2]) for(const dx of [-2,0,2]){ const m=boxFit(I,x+dx,y+dy,a,b,true); if(m && m.score>bm) bm=Math.min(1,m.score); } return bm; };
+  const rA=A.pos.map(onBox), rB=B.pos.map(onBox), sA=rA.reduce((p,q)=>p+q,0), sB=rB.reduce((p,q)=>p+q,0), mg=0.05*rows.length;
+  /* A reading that has jumped a row somewhere shows it in its spacing: rows are evenly spaced on the page, and in the photo the
+     spacing changes only gradually (perspective, a bend), so one gap far off the gaps around it means a box was taken for its
+     neighbour. A reading like that is set aside if the other one has none. */
+  const jumps=P=>{ const sp=[]; for(let i=0;i+1<rows.length;i++){ const du=Math.hypot(rows[i+1].x-rows[i].x,rows[i+1].y-rows[i].y); if(du>0) sp.push(Math.hypot(P[i+1][0]-P[i][0],P[i+1][1]-P[i][1])/du); }
+    return sp.some((x,j)=>{ const w=sp.slice(Math.max(0,j-3),j+4).sort((p,q)=>p-q), md=w[w.length>>1]; return Math.abs(x-md)>0.4*md; }); };
+  /* And the bottom must fit: the last row on a box, and none a row further on (the page ends there). A reading that's a
+     row out puts its last row on blank paper, or has a box after it. */
+  const endOk=P=>{ const n=P.length; if(n<2) return true; const L=P[n-1], Q=P[n-2], f=(rows[n-1].y-rows[n-2].y)>0?1:0; if(!f) return true;
+    const gh=[2*L[0]-Q[0],2*L[1]-Q[1],L[2],L[3]]; return onBox(L)>=0.1 && onBox(gh)<0.1; };
+  const jA=jumps(A.pos)||!endOk(A.pos), jB=jumps(B.pos)||!endOk(B.pos);
+  if(jB && !jA) return done(A); if(jA && !jB) return done(B);
+  if(!jA && !jB){ if(sA>sB+mg) return done(A); if(sB>sA+mg) return done(B); }   /* both jumped: neither is taken whole */
+  const near=(i,P)=>Math.min(...[i-1,i+1].filter(j=>j>=0&&j<rows.length).map(j=>Math.hypot(P[j][0]-P[i][0],P[j][1]-P[i][1])),1e9);
+  const items=A.items.map((a,i)=>{ const b=B.items[i], d=Math.hypot(A.pos[i][0]-B.pos[i][0],A.pos[i][1]-B.pos[i][1]), same=d<=0.3*Math.min(near(i,A.pos),near(i,B.pos));
+    if(same && a.state===b.state) return a;
+    if(same && (a.state==="unclear"||b.state==="unclear")) return a.state==="unclear"? b : a;
+    /* the two looked at different spots: the reading that sits better overall wins the row only if it's on a box there and
+       the other plainly isn't (both on a box could be a row out either way) */
+    if(!same && !jA && sA>=sB && rA[i]>=0.1 && rA[i]-rB[i]>=0.2) return a;
+    if(!same && !jB && sB>=sA && rB[i]>=0.1 && rB[i]-rA[i]>=0.2) return b;
+    return Object.assign({},a,{state:"unclear"}); });
   return {page:pg.page, items};
 }
 /* All photos of one scan → the same shape the AI reader returned, plus warnings and the photos that couldn't be read. */
@@ -2987,9 +3088,11 @@ function qsFbLabel(){ const t=$("#qs-fbt"); if(t) t.innerHTML=qs.desk?`${ICON.im
 /* look for a page code a few times a second (larger frame than the quality check) */
 async function qsScanQr(){
   const v=$("#qs-v"); if(qs.qrBusy || !qs.decode || !v || !v.videoWidth) return; qs.qrBusy=true;
-  try{ const w=Math.min(1280,v.videoWidth), h=Math.round(w*v.videoHeight/v.videoWidth), c=qs.qc||(qs.qc=document.createElement("canvas"));
+  /* A smaller copy reads faster; when it finds no page code, the next look is at the camera's full size (a mounted camera
+     can't move closer, and a small code needs every pixel), and it stays there while that keeps working. */
+  try{ const w=qs.qrFull? v.videoWidth : Math.min(1280,v.videoWidth), h=Math.round(w*v.videoHeight/v.videoWidth), c=qs.qc||(qs.qc=document.createElement("canvas"));
     if(c.width!==w||c.height!==h){ c.width=w; c.height=h; } c.getContext("2d",{willReadFrequently:true}).drawImage(v,0,0,w,h);
-    const hits=await qs.decode(c); qs.seen={p:qsPageOf(hits), any:hits.length>0, at:Date.now()}; }catch(e){}
+    const hits=await qs.decode(c), p=qsPageOf(hits); qs.seen={p, any:hits.length>0, at:Date.now()}; if(!p && v.videoWidth>1280) qs.qrFull=!qs.qrFull; }catch(e){}
   qs.qrBusy=false;
 }
 /* frame quality + page code: only a visible, new, steady, sharp checklist page is taken */
@@ -3009,7 +3112,7 @@ function qsFraming(hit,vw,vh){
   const Q=hit&&hit.quad; if(!Q) return null;
   const t=qrTilt(Q.map(p=>[p.x*vw,p.y*vh])); if(!t) return null;
   const page=t.side*792/CL_QR_BOX.s, frame=Math.max(vw,vh);
-  let fit=page>frame*1.04?"close" : page<frame*0.5?"far" : "ok";
+  let fit=page>frame*1.04?"close" : page<frame*0.35?"far" : "ok";
   if(fit==="ok" && hit.tl && hit.tr && hit.bl){   /* every page corner in view (the code's own corners give the page's direction) */
     const o=[hit.tl.x*vw,hit.tl.y*vh], u=[(hit.tr.x-hit.tl.x)*vw/CL_QR_BOX.s,(hit.tr.y-hit.tl.y)*vh/CL_QR_BOX.s], v=[(hit.bl.x-hit.tl.x)*vw/CL_QR_BOX.s,(hit.bl.y-hit.tl.y)*vh/CL_QR_BOX.s];
     if([[0,0],[612,0],[0,792],[612,792]].some(([x,y])=>{ const px=o[0]+(x-CL_QR_BOX.x)*u[0]+(y-CL_QR_BOX.y)*v[0], py=o[1]+(x-CL_QR_BOX.x)*u[1]+(y-CL_QR_BOX.y)*v[1]; return px<-0.05*vw||py<-0.05*vh||px>1.05*vw||py>1.05*vh; })) fit="out"; }
@@ -3030,8 +3133,9 @@ function qsTick(){
     qsMsg(qs.checking?"Got it. Checking the last page…" : just?`Got ${pg.page} ${qsSecName(pg.page)}. Show the next page` : `${pg.page} ${qsSecName(pg.page)} is already done. Show another page`); return; }
   const label=`${pg.page} ${qsSecName(pg.page)}`, fr=qsFraming(pg.hit,v.videoWidth,v.videoHeight);
   if(again && again.page===pg.page && Date.now()-again.at<2500){ qs.stable=0; qs.peak=0; qsFrame("warn"); qsMsg(again.msg); return; }   /* give them a moment to change the shot */
-  const steep=fr && fr.tilt>QS_TILT_MAX; if(!steep) qs.steepAt=0; else if(!qs.steepAt) qs.steepAt=Date.now();
-  if(fr && (fr.fit!=="ok" || (steep && Date.now()-qs.steepAt<4000))){ qs.stable=0; qs.peak=0; qsFrame("warn");   /* steep for 4 s: take it anyway, the reader decides */
+  /* steep or far for 4 s: take it anyway, the reader decides (a mounted camera can't move closer). Cut off at the edge: wait */
+  const soft=fr && (fr.tilt>QS_TILT_MAX || fr.fit==="far"); if(!soft) qs.steepAt=0; else if(!qs.steepAt) qs.steepAt=Date.now();
+  if(fr && (fr.fit==="close" || fr.fit==="out" || (soft && Date.now()-qs.steepAt<4000))){ qs.stable=0; qs.peak=0; qsFrame("warn");   /* steep for 4 s: take it anyway, the reader decides */
     qsMsg(fr.fit==="close"||fr.fit==="out"?`${label}: move back so the whole page is in view` : fr.fit==="far"?`${label}: move closer so the page fills the frame` : `${label}: hold the phone flatter, straight over the page`); return; }
   const w=200, h=Math.max(1,Math.round(w*v.videoHeight/v.videoWidth));
   const c=qs.cv||(qs.cv=document.createElement("canvas")); if(c.width!==w||c.height!==h){ c.width=w; c.height=h; }
@@ -3039,18 +3143,19 @@ function qsTick(){
   const d=x.getImageData(0,0,w,h).data, g=new Float32Array(w*h);
   for(let i=0,j=0;i<g.length;i++,j+=4) g[i]=.299*d[j]+.587*d[j+1]+.114*d[j+2];
   const x0=Math.round(w*.1), x1=Math.round(w*.9), y0=Math.round(h*.1), y1=Math.round(h*.9);
-  let n=0,sum=0,bright=0,clip=0,lap=0;
-  for(let yy=y0+1;yy<y1-1;yy++) for(let xx=x0+1;xx<x1-1;xx++){ const i=yy*w+xx, p=g[i]; n++; sum+=p; if(p>150) bright++; if(p>=250) clip++; lap+=Math.abs(4*p-g[i-1]-g[i+1]-g[i-w]-g[i+w]); }
-  const mean=sum/n, sharp=lap/n, clipR=bright?clip/bright:0;
+  let n=0,sum=0,lap=0;
+  for(let yy=y0+1;yy<y1-1;yy++) for(let xx=x0+1;xx<x1-1;xx++){ const i=yy*w+xx, p=g[i]; n++; sum+=p; lap+=Math.abs(4*p-g[i-1]-g[i+1]-g[i-w]-g[i+w]); }
+  const mean=sum/n, sharp=lap/n;
   const dif=(a,b)=>{ if(!a||a.length!==b.length) return 255; let s=0,k=0; for(let i=0;i<b.length;i+=3,k++) s+=Math.abs(b[i]-a[i]); return s/k; };
   const move=dif(qs.prev,g); qs.prev=g;
   if(mean<45){ qs.stable=0; qsMsg("Too dark. Move to more light"); return; }
   if(move>5){ qs.stable=0; qs.peak=0; qsMsg(`${label}: hold still…`); return; }
   qs.stable++; if(sharp>qs.peak) qs.peak=sharp;
-  const glare=clipR>0.08 && clipR<0.6;
-  const good=qs.stable>=4 && !glare && sharp>=Math.max(3.5,qs.peak*0.85);
-  if(good || qs.stable>=18) qsCapture(g,pg.page);   /* after ~2.5 s steady, take it anyway; the reader marks hidden boxes Unclear */
-  else { qsFrame(glare?"warn":"good"); qsMsg(glare?`${label}: glare on the page. Tilt it a little`:`${label}: good. Hold still…`); }
+  /* glare doesn't hold the photo back: a mounted camera can't tilt, the reader marks boxes under glare Unclear, and a page it
+     can't read is asked for again */
+  const good=qs.stable>=4 && sharp>=Math.max(3.5,qs.peak*0.85);
+  if(good || qs.stable>=18) qsCapture(g,pg.page);   /* after ~2.5 s steady, take it anyway */
+  else { qsFrame("good"); qsMsg(`${label}: good. Hold still…`); }
 }
 async function qsCapture(g,page){
   const v=$("#qs-v"); if(!v || !v.videoWidth || qs.finishing) return;
