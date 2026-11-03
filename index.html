@@ -1376,7 +1376,7 @@ function paintStatus(){
     return `<div class="card cktile ${cls}" data-act="ck-sec" data-id="${s.sec.id}">
       <div class="ckt-h"><span class="no">${s.sNo||"App"}</span><b>${esc(s.sec.name)}</b><span class="who">${esc(asg[s.sec.id]||"Not assigned")}</span></div>
       ${sbar(c)}<div class="ckt-s">${st}${nf?` <span class="pill bad">${nf} problem${nf===1?"":"s"}</span>`:""}</div>${list}
-      ${att.length?`<div class="ckt-a"><button class="btn sm" data-act="ck-verify-sec" data-id="${s.sec.id}">${ICON.check}Verify all</button><button class="btn sm" data-act="ck-sec" data-id="${s.sec.id}">Open</button></div>`:""}</div>`; }).join("")}
+      <div class="ckt-a"><button class="btn sm" data-act="ck-verify-sec" data-id="${s.sec.id}" ${c.done===c.total?`disabled title="Everything in ${esc(s.sec.name)} is done"`:""}>${ICON.check}Verify all</button><button class="btn sm" data-act="ck-sec" data-id="${s.sec.id}">Open</button></div></div>`; }).join("")}
     ${appItems.length?(()=>{ const d=appItems.filter(x=>x.st==="done").length; return `<div class="card cktile app ${d===appItems.length?"ok":""}" data-act="ck-app">
       <div class="ckt-h"><span class="no">App</span><b>Your app checks</b></div><div class="ckt-s">${d===appItems.length?ICON.check:""}${d} of ${appItems.length} done</div>
       <div class="ckt-a"><button class="btn sm" data-act="ck-app">Open</button></div></div>`; })():""}</div>`;
@@ -1385,11 +1385,13 @@ function paintStatus(){
 function ckRunSelect(runs,run){ return `<label class="sr" for="ck-run">Match checklist</label><select id="ck-run" class="cks-run">${runs.map(r=>{ const x=runState(r); return `<option value="${r.id}" ${r.id===run.id?"selected":""}>${esc(r.label)} · ${x?(x.verified?"verified":x.pct+"%"):"checklist deleted"} · ${fmtDay(r.createdAt)}</option>`; }).join("")}</select>`; }
 /* items that need a look: left blank or unclear on the scan; priority items first, then blank before unclear */
 const ckAtt=its=>its.filter(x=>x.st==="missing"||x.st==="unclear").sort((a,b)=>(b.it.priority?1:0)-(a.it.priority?1:0)||(a.st==="missing"?0:1)-(b.st==="missing"?0:1));
-/* Verify every item in a section that was left blank or unclear (the person checked the robot themselves) */
+/* items in a section that aren't done yet: left blank, unclear, or not checked yet */
+const ckTodo=its=>its.filter(x=>x.st!=="done");
+/* Verify every item in a section that isn't done yet (the person checked the robot themselves) */
 async function ckVerifySec(secId){
   const run=activeRun(), rs=run&&runState(run), s=rs&&rs.secs.find(x=>x.sec.id===secId); if(!s) return;
-  const att=ckAtt(s.its.filter(x=>!x.head)); if(!att.length){ toast("Nothing left to verify in "+s.sec.name); return; }
-  if(!(await confirmBox(`Mark all ${att.length} ${s.sec.name} item${att.length===1?"":"s"} that were left blank or unclear on ${run.label} as verified? Only do this once you've checked them on the robot.`,`Verify all ${att.length}`))) return;
+  const att=ckTodo(s.its.filter(x=>!x.head)); if(!att.length){ toast("Everything in "+s.sec.name+" is done"); return; }
+  if(!(await confirmBox(`Mark ${att.length===1?"the 1":"all "+att.length} ${s.sec.name} item${att.length===1?"":"s"} that ${att.length===1?"isn't":"aren't"} done yet on ${run.label} as verified? Only do this once you've checked ${att.length===1?"it":"them"} on the robot.`,`Verify all ${att.length}`))) return;
   const patch={}; att.forEach(x=>{ patch[x.id]=stamp({via:"verified"}); });
   if(write("runs",run.id,"update",{checks:patch})) toast(`${s.sec.name}: ${att.length} marked done`);
 }
@@ -1402,7 +1404,7 @@ function ckSecSheet(secId){
       ${att.length?`<h3 class="cksh-h">Needs attention</h3><ul class="attn">${att.map(x=>`<li class="arow ${x.st}"><span class="t">${x.no?`<span class="no">${x.no}</span>`:""}${x.it.priority?`<span class="star" title="Priority">${ICON.starf}</span> `:""}<span class="txt">${fmtItem(x.it.text)}</span><span class="sec">${x.st==="missing"?"left blank on paper":"couldn't read the mark"}</span></span>
         <span class="acts"><button class="btn" data-act="verify" data-id="${x.id}">${ICON.check}Verified</button><button class="btn" data-act="flag" data-id="${x.id}">Problem</button></span>${scanPeek(run,x)}</li>`).join("")}</ul>`:""}
       <h3 class="cksh-h">All ${its.length} items</h3><ul class="ilist cksh-l">${s.its.map(x=>x.head?`<li class="ihead">${esc(x.it.text)}</li>`:`<li class="irow ${x.st} ${x.it.type==="sub"?"sub":""}"><span class="st">${x.st==="done"?ICON.check:x.st==="missing"?ICON.x:x.st==="unclear"?ICON.q:""}</span><span class="no">${x.no||"app"}</span><span class="txt">${fmtItem(x.it.text)}${x.c&&x.c.via==="verified"?` <span class="muted" style="font-size:13px">· verified by ${esc(whoOf(x.c))}</span>`:""}</span>${x.st==="done"&&x.c&&x.c.via!=="scan"?`<button class="btn ghost" data-act="unverify" data-id="${x.id}">Undo</button>`:x.st!=="done"?`<button class="btn ghost" data-act="verify" data-id="${x.id}">Mark done</button>`:"<span></span>"}</li>`).join("")}</ul>`;
-    el.querySelector(".sheet-foot").innerHTML=`<button class="btn" data-close>Close</button>${any?`<button class="btn" data-act="reset-sec" data-id="${secId}">Reset section</button>`:""}${att.length?`<button class="btn primary" data-act="ck-verify-sec" data-id="${secId}">${ICON.check}Verify all ${att.length}</button>`:""}`; };
+    el.querySelector(".sheet-foot").innerHTML=`<button class="btn" data-close>Close</button>${any?`<button class="btn" data-act="reset-sec" data-id="${secId}">Reset section</button>`:""}${s.c.done<s.c.total?`<button class="btn primary" data-act="ck-verify-sec" data-id="${secId}">${ICON.check}Verify all ${s.c.total-s.c.done}</button>`:""}`; };
   openSheet({title:"", body:"", foot:" ", onMount(el){ paint(el);
     el.addEventListener("click",e=>{ const b=e.target.closest("[data-act]"); if(!b) return; e.stopPropagation();   /* the page's own handler must not act on it too (the button is redrawn) */
       const a=b.dataset.act, id=b.dataset.id;
