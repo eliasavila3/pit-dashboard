@@ -271,6 +271,15 @@ main:has(.ckboard){max-width:none}
 .qs-stage video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
 .qs-frame{position:absolute;inset:8% 6%;border:3px dashed var(--on-brand);border-radius:14px;opacity:.75;pointer-events:none}
 .qs-flash{position:absolute;inset:0;background:var(--on-brand);opacity:0;pointer-events:none}
+.qs-ok{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:1;width:min(620px,calc(100% - 32px));display:grid;justify-items:center;gap:6px;padding:22px 24px;border-radius:22px;background:var(--ok);color:var(--bg);text-align:center;box-shadow:0 18px 50px rgba(0,0,0,.35);animation:qsok .18s ease-out}
+.qs-ok b{font-family:var(--f-display);font-size:clamp(28px,4.4vw,44px);line-height:1.1}
+.qs-ok span{font-size:clamp(18px,2.4vw,24px);font-weight:600}
+.qs-ok .qs-okn{font-family:var(--f-mono);font-size:16px;font-weight:600;opacity:.85}
+.qs-okc{width:clamp(64px,9vw,96px);height:clamp(64px,9vw,96px);border-radius:50%;display:grid;place-items:center;background:var(--bg);color:var(--ok)}
+.qs-ok:not([hidden]) ~ .qs-msg{display:none}   /* the panel says it */
+.qs-okc svg{width:62%;height:62%;stroke-width:3.2}
+.qs-ok.bad{background:var(--warn)} .qs-ok.bad .qs-okc{color:var(--warn)}
+@keyframes qsok{0%{transform:translate(-50%,-50%) scale(.9);opacity:0}100%{transform:translate(-50%,-50%) scale(1);opacity:1}}
 .qs-flash.go{animation:qsflash .45s ease-out}
 @keyframes qsflash{0%{opacity:.85}100%{opacity:0}}
 .qs-msg{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);max-width:calc(100% - 32px);padding:12px 20px;border-radius:14px;background:var(--brand-deep);color:var(--on-brand);font-weight:700;font-size:20px;text-align:center;box-shadow:0 6px 24px rgba(0,0,0,.35)}
@@ -2629,13 +2638,15 @@ function polyfit(xs,ys,deg){   /* least squares y = c0 + c1 x + c2 x^2 (deg 0..2
 function markImg(c,bs){
   const W=c.width, H=c.height, px=c.getContext("2d",{willReadFrequently:true}).getImageData(0,0,W,H).data;
   const m=new Float32Array(W*H), t=new Float32Array(W*H), G=new Uint8Array(W*H), C=new Uint8Array(W*H);
-  for(let i=0,j=0;i<m.length;i++,j+=4){ const r=px[j],g=px[j+1],b=px[j+2], lo=r<g?(r<b?r:b):(g<b?g:b); m[i]=lo; G[i]=lo>=246?1:0; }
   /* Coloured marker (blue, red, green): measured after evening out the room light's colour cast (paper reads as white), so a
      coloured stroke can be told apart from the black printed box even where it runs over the box's edge. */
   const wb=[0,0,0]; let wn=0; for(let j=0;j<px.length;j+=28){ const L=px[j]+px[j+1]+px[j+2]; if(L>360){ wb[0]+=px[j]; wb[1]+=px[j+1]; wb[2]+=px[j+2]; wn++; } }
   const wmax=wn?Math.max(wb[0],wb[1],wb[2]):1, kr=wn?wmax/Math.max(1,wb[0]):1, kg=wn?wmax/Math.max(1,wb[1]):1, kb=wn?wmax/Math.max(1,wb[2]):1;
-  for(let i=0,j=0;i<m.length;i++,j+=4){ const r=px[j]*kr, g=px[j+1]*kg, b=px[j+2]*kb, hi=Math.max(r,g,b), lo=Math.min(r,g,b); C[i]=(hi-lo)>=45 && (hi-lo)>=0.35*hi?1:0; }
-  for(let y=0;y<H;y++){ const o=y*W; for(let x=0;x<W;x++) t[o+x]=(m[o+Math.max(0,x-1)]+m[o+x]+m[o+Math.min(W-1,x+1)])/3; }
+  for(let i=0,j=0;i<m.length;i++,j+=4){ const r0=px[j],g0=px[j+1],b0=px[j+2], lo0=r0<g0?(r0<b0?r0:b0):(g0<b0?g0:b0); m[i]=lo0; G[i]=lo0>=246?1:0;
+    const r=r0*kr, g=g0*kg, b=b0*kb, hi=r>g?(r>b?r:b):(g>b?g:b), lo=r<g?(r<b?r:b):(g<b?g:b); C[i]=(hi-lo)>=45 && (hi-lo)>=0.35*hi?1:0; }
+  /* grain: average each pixel with its neighbours, across then down (edge pixels count themselves in place of the missing one) */
+  for(let y=0;y<H;y++){ const o=y*W; if(W===1){ t[o]=(m[o]+m[o]+m[o])/3; continue; }
+    t[o]=(m[o]+m[o]+m[o+1])/3; for(let x=1;x<W-1;x++) t[o+x]=(m[o+x-1]+m[o+x]+m[o+x+1])/3; t[o+W-1]=(m[o+W-2]+m[o+W-1]+m[o+W-1])/3; }
   for(let y=0;y<H;y++){ const o=y*W, u=Math.max(0,y-1)*W, d=Math.min(H-1,y+1)*W; for(let x=0;x<W;x++) m[o+x]=(t[u+x]+t[o+x]+t[d+x])/3; }
   const bw=Math.ceil(W/bs), bh=Math.ceil(H/bs), hist=new Uint32Array(bw*bh*64), cnt=new Uint32Array(bw*bh), p90=new Float32Array(bw*bh);
   for(let y=0;y<H;y++){ const ry=((y/bs)|0)*bw; for(let x=0;x<W;x+=2){ const k=ry+((x/bs)|0); hist[k*64+(m[y*W+x]>>2)]++; cnt[k]++; } }
@@ -2643,16 +2654,42 @@ function markImg(c,bs){
   const dil=new Float32Array(bw*bh);   /* blocks are bigger than a box, and the neighbours' white is used too, so a filled box can't pass for paper */
   for(let y=0;y<bh;y++) for(let x=0;x<bw;x++){ let v=0; for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++){ const yy=y+dy, xx=x+dx; if(yy>=0&&yy<bh&&xx>=0&&xx<bw&&p90[yy*bw+xx]>v) v=p90[yy*bw+xx]; } dil[y*bw+x]=v; }
   const D=new Float32Array(W*H), paper=[];
-  for(let y=0;y<H;y++){ const fy=Math.min(bh-1,Math.max(0,y/bs-0.5)), y0=fy|0, y1=Math.min(bh-1,y0+1), ty=fy-y0;
-    for(let x=0;x<W;x++){ const fx=Math.min(bw-1,Math.max(0,x/bs-0.5)), x0=fx|0, x1=Math.min(bw-1,x0+1), tx=fx-x0;
-      const bg=(dil[y0*bw+x0]*(1-tx)+dil[y0*bw+x1]*tx)*(1-ty)+(dil[y1*bw+x0]*(1-tx)+dil[y1*bw+x1]*tx)*ty, i=y*W+x, v=Math.max(0,Math.min(1,(bg-m[i])/Math.max(bg,40)));
-      D[i]=v; if(v<0.2 && !((x+y*7)%13)) paper.push(v); } }
+  const X0=new Int32Array(W), X1=new Int32Array(W), TX=new Float64Array(W), UX=new Float64Array(W);   /* each column's place between block centres, worked out once */
+  for(let x=0;x<W;x++){ const fx=Math.min(bw-1,Math.max(0,x/bs-0.5)), x0=fx|0; X0[x]=x0; X1[x]=Math.min(bw-1,x0+1); TX[x]=fx-x0; UX[x]=1-TX[x]; }
+  for(let y=0;y<H;y++){ const fy=Math.min(bh-1,Math.max(0,y/bs-0.5)), y0=fy|0, y1=Math.min(bh-1,y0+1), ty=fy-y0, uy=1-ty, r0=y0*bw, r1=y1*bw, o=y*W, s7=(y*7)%13;
+    for(let x=0;x<W;x++){ const x0=X0[x], x1=X1[x], tx=TX[x], ux=UX[x];
+      const bg=(dil[r0+x0]*ux+dil[r0+x1]*tx)*uy+(dil[r1+x0]*ux+dil[r1+x1]*tx)*ty, i=o+x, w=(bg-m[i])/(bg>40?bg:40), v=w>1?1:w<0?0:w;
+      D[i]=v; if(v<0.2 && !((x+s7)%13)) paper.push(v); } }
   paper.sort((a,b)=>a-b); const n95=paper.length?paper[Math.floor(paper.length*0.95)]:0;
   return {D,G,C,W,H,ink:Math.max(MARK.ink,2*n95+0.12)};
 }
 /* How well a printed square fits at (cx,cy): a,b = half-side vectors along the page's x and y, in photo pixels.
    Its four sides must all be dark, with paper just outside and (mostly) just inside, so filled blocks and text don't fit. */
+const BOXT=Array.from({length:12},(_,i)=>-0.85+1.7*i/(12-1)), BOXSIDES=[[0,-1],[0,1],[-1,0],[1,0]], BOXOUT=new Float32Array(12);
 function boxFit(I,cx,cy,a,b,inked){   /* inked: don't count marker inside the box against it */
+  /* Fast path for a box well inside the photo (almost every call): the same sums in the same order as boxFitAt below, without
+     the bounds checks on every pixel, so the result is exactly the same. */
+  const a0=a[0], a1=a[1], b0=b[0], b1=b[1], la=Math.hypot(a0,a1), lb=Math.hypot(b0,b1); if(la<3||lb<3) return null;
+  const D=I.D, W=I.W, H=I.H, g=Math.max(3/Math.min(la,lb),0.22), Rx=(1+g)*(Math.abs(a0)+Math.abs(b0))+2, Ry=(1+g)*(Math.abs(a1)+Math.abs(b1))+2;
+  if(!(cx-Rx>=0 && cy-Ry>=0 && cx+Rx<=W-1 && cy+Ry<=H-1)) return boxFitAt(I,cx,cy,a,b,inked);
+  const pa0=a0/la, pa1=a1/la, pb0=b0/lb, pb1=b1/lb, T=BOXT, S=12;
+  let emin=Infinity, ring=0, inner=0;
+  for(let k=0;k<4;k++){ const sx=BOXSIDES[k][0], sy=BOXSIDES[k][1], u0=k<2?a0:b0, u1=k<2?a1:b1, q0=k<2?pb0:pa0, q1=k<2?pb1:pa1;
+    let bx=cx+1*(sx*a0+sy*b0), by=cy+1*(sx*a1+sy*b1), sum=0;   /* the side itself: darkest of three pixels across it */
+    for(let i=0;i<S;i++){ const t=T[i], x=bx+t*1*u0, y=by+t*1*u1;
+      const v0=D[Math.round(y)*W+Math.round(x)], v1=D[Math.round(y-q1)*W+Math.round(x-q0)], v2=D[Math.round(y+q1)*W+Math.round(x+q0)];
+      sum+=Math.max(v0,v1,v2); }
+    const e=sum/S; if(e<emin) emin=e;
+    let f=1+g; bx=cx+f*(sx*a0+sy*b0); by=cy+f*(sx*a1+sy*b1); sum=0;   /* just outside */
+    if(inked && k<2){ const O=BOXOUT; for(let i=0;i<S;i++){ const t=T[i]; O[i]=D[Math.round(by+t*f*u1)*W+Math.round(bx+t*f*u0)]; }
+      const o=Array.from(O).sort((p,q)=>p-q); let st=0; for(let i=0;i<8;i++) st+=o[i]; ring+=(st/8)/4; }
+    else { for(let i=0;i<S;i++){ const t=T[i]; sum+=D[Math.round(by+t*f*u1)*W+Math.round(bx+t*f*u0)]; } ring+=(sum/S)/4; }
+    f=1-g; bx=cx+f*(sx*a0+sy*b0); by=cy+f*(sx*a1+sy*b1); sum=0;   /* just inside */
+    for(let i=0;i<S;i++){ const t=T[i]; sum+=D[Math.round(by+t*f*u1)*W+Math.round(bx+t*f*u0)]; }
+    inner+=(sum/S)/4; }
+  return {e:emin, score:emin-ring-(inked?0:0.5*inner)};
+}
+function boxFitAt(I,cx,cy,a,b,inked){   /* the same, checking every pixel is inside the photo (a box near its edge) */
   const {D,W,H}=I, la=Math.hypot(a[0],a[1]), lb=Math.hypot(b[0],b[1]); if(la<3||lb<3) return null;
   const pa=[a[0]/la,a[1]/la], pb=[b[0]/lb,b[1]/lb], at=(x,y)=>{ x=Math.round(x); y=Math.round(y); return x<0||y<0||x>=W||y>=H?-1:D[y*W+x]; };
   const S=12; let edges=[1,1,1,1], ring=0, inner=0;
@@ -2754,21 +2791,59 @@ function boxInk(I,cx,cy,a,b){
   const of=os.map((v,i)=>on[i]?v/on[i]:0), through=(of[2]>=0.08&&of[3]>=0.08)||(of[0]>=0.08&&of[1]>=0.08);   /* marker outside on opposite sides: a line through the box, not a tip */
   return tot?{ink:ink/tot, inkC:inkC/tot, glare:glare/tot, edge, out:otot?out/otot:0, through}:{ink:0,inkC:0,glare:1,edge:0,out:0,through:false};
 }
+const JSQR_URL="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js";
 let jsQrLib=null;
 function loadJsQr(){
   if(window.jsQR) return Promise.resolve(window.jsQR);
   if(jsQrLib) return jsQrLib;
-  jsQrLib=new Promise((res,rej)=>{ const s=document.createElement("script"); s.src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"; s.onload=()=>window.jsQR?res(window.jsQR):rej(new Error("load")); s.onerror=()=>{ jsQrLib=null; rej(new Error("load")); }; document.head.appendChild(s); });
+  jsQrLib=new Promise((res,rej)=>{ const s=document.createElement("script"); s.src=JSQR_URL; s.onload=()=>window.jsQR?res(window.jsQR):rej(new Error("load")); s.onerror=()=>{ jsQrLib=null; rej(new Error("load")); }; document.head.appendChild(s); });
   return jsQrLib;
 }
 /* One photo → {page, items:[{no,state,y}]} or {warn}. y = how far down the photo the box is (0..1). */
-async function readPageLocal(blob,cl,N,L){
+/* The page code read straight from where the live camera already saw it (hint: its box, as fractions of the photo): a
+   full-size crop around it. The camera's own frames can be softer than a photo, and a crop reads where the whole frame
+   sometimes doesn't. */
+function qrNear(c,hint){
+  try{ const W=c.width, H=c.height, m=Math.max(hint.w*W,hint.h*H)*0.9+24;
+    const x0=Math.max(0,Math.floor(hint.x*W-m)), y0=Math.max(0,Math.floor(hint.y*H-m)), x1=Math.min(W,Math.ceil((hint.x+hint.w)*W+m)), y1=Math.min(H,Math.ceil((hint.y+hint.h)*H+m));
+    if(x1-x0<32||y1-y0<32) return null;
+    const d=c.getContext("2d",{willReadFrequently:true}).getImageData(x0,y0,x1-x0,y1-y0), r=window.jsQR(d.data,x1-x0,y1-y0,{inversionAttempts:"dontInvert"});
+    if(!r || !clQrParse(r.data)) return null;
+    const f=p=>[p.x+x0,p.y+y0], L2=r.location; return {t:r.data, tl:f(L2.topLeftCorner), tr:f(L2.topRightCorner), bl:f(L2.bottomLeftCorner), br:f(L2.bottomRightCorner)};
+  }catch(e){ return null; }
+}
+/* The page code: located on a half-size copy (a quarter of the pixels), then read again at full size from just the area
+   around it, so the corners are as exact as reading the whole photo. Returns {q} with the corners, {half} when the code only
+   reads on the half-size copy (a grainy photo: those corners are used, as the whole-photo read would have ended up doing),
+   or {} when the half-size copy shows no code at all. */
+function qrQuick(c){
+  try{ const h=document.createElement("canvas"); h.width=Math.max(1,c.width>>1); h.height=Math.max(1,c.height>>1);
+    const hx=h.getContext("2d",{willReadFrequently:true}); hx.imageSmoothingQuality="high"; hx.drawImage(c,0,0,h.width,h.height);
+    const hd=hx.getImageData(0,0,h.width,h.height), half=window.jsQR(hd.data,h.width,h.height,{inversionAttempts:"dontInvert"}); if(!half || !clQrParse(half.data)) return {canvas:h};
+    const K=["topLeftCorner","topRightCorner","bottomLeftCorner","bottomRightCorner"], sc=h.width/c.width, hf=p=>[p.x/sc,p.y/sc], HL=half.location;
+    const hq={t:half.data, tl:hf(HL.topLeftCorner), tr:hf(HL.topRightCorner), bl:hf(HL.bottomLeftCorner), br:hf(HL.bottomRightCorner)};
+    const xs=K.map(k=>HL[k].x/sc), ys=K.map(k=>HL[k].y/sc), m=Math.round((Math.max(...xs)-Math.min(...xs))*0.8)+16;   /* the code plus most of a code's width around it (its quiet zone and the binarizer's blocks) */
+    const x0=Math.max(0,Math.floor((Math.min(...xs)-m)/8)*8), y0=Math.max(0,Math.floor((Math.min(...ys)-m)/8)*8), x1=Math.min(c.width,Math.ceil(Math.max(...xs)+m)), y1=Math.min(c.height,Math.ceil(Math.max(...ys)+m));
+    if(x1-x0<32||y1-y0<32) return {half:hq};
+    const d=c.getContext("2d",{willReadFrequently:true}).getImageData(x0,y0,x1-x0,y1-y0), r=window.jsQR(d.data,x1-x0,y1-y0,{inversionAttempts:"dontInvert"});
+    if(!r || r.data!==half.data) return {half:hq};
+    const f=p=>[p.x+x0,p.y+y0], L2=r.location; return {q:{t:r.data, tl:f(L2.topLeftCorner), tr:f(L2.topRightCorner), bl:f(L2.bottomLeftCorner), br:f(L2.bottomRightCorner)}};
+  }catch(e){ return {}; }
+}
+async function readPageLocal(blob,cl,N,L,hint,tm){   /* tm: optional, filled with how long each step took (ms) */
+  const M=tm||{}, T0=performance.now(), lap=k=>{ const t=performance.now(); M[k]=Math.round(t-(M._t||T0)); M._t=t; };
   const bm=await createImageBitmap(blob), c=document.createElement("canvas"); c.width=bm.width; c.height=bm.height; c.getContext("2d").drawImage(bm,0,0); if(bm.close) bm.close();
   let q=null, src=c, sc=1;   /* the page code's corners; halved copies average out grain from dim light */
-  for(let k=0;k<3;k++){
+  lap("open");
+  const qn=hint?qrNear(c,hint):null;   /* the live camera already saw it: read it there first */
+  const qq=qn?{q:qn}:qrQuick(c);   /* found on a half-size copy, corners read at full size around it: much faster than the whole photo */
+  q=qq.q||qq.half||null;
+  for(let k=0;k<3 && !q;k++){   /* no code on the half-size copy: the whole photo, then a quarter-size copy (the half-size one was just tried) */
+    if(k===1 && qq.canvas){ src=qq.canvas; sc=src.width/c.width; continue; }
     if(k){ const t=document.createElement("canvas"); t.width=Math.max(1,src.width>>1); t.height=Math.max(1,src.height>>1); const tx=t.getContext("2d"); tx.imageSmoothingQuality="high"; tx.drawImage(src,0,0,t.width,t.height); src=t; sc=t.width/c.width; }
     const d=src.getContext("2d",{willReadFrequently:true}).getImageData(0,0,src.width,src.height);
     const r=window.jsQR(d.data,src.width,src.height,{inversionAttempts:"dontInvert"}); if(r && clQrParse(r.data)){ const L2=r.location, f=p=>[p.x/sc,p.y/sc]; q={t:r.data, tl:f(L2.topLeftCorner), tr:f(L2.topRightCorner), bl:f(L2.bottomLeftCorner), br:f(L2.bottomRightCorner)}; break; } }
+  M.codeHow=qn?"hint":qq.q?"half+crop":qq.half?"half":q?"whole":"none"; lap("code");
   if(!q) return {warn:"nocode"};
   const pg=clQrParse(q.t);
   if(pg.code!==String(cl.code).toUpperCase()) return {warn:"other", page:pg.page, code:pg.code};
@@ -2780,7 +2855,7 @@ async function readPageLocal(blob,cl,N,L){
   let ex=[(q.tr[0]-q.tl[0])/CL_QR_BOX.s,(q.tr[1]-q.tl[1])/CL_QR_BOX.s], ey=[(q.bl[0]-q.tl[0])/CL_QR_BOX.s,(q.bl[1]-q.tl[1])/CL_QR_BOX.s];
   let aff=(u,v)=>[q.tl[0]+(u-CL_QR_BOX.x)*ex[0]+(v-CL_QR_BOX.y)*ey[0], q.tl[1]+(u-CL_QR_BOX.x)*ex[1]+(v-CL_QR_BOX.y)*ey[1]];
   const ppt=(Math.hypot(...ex)+Math.hypot(...ey))/2, maxS=Math.max(...rows.map(r=>r.s));
-  const I=markImg(c,Math.max(24,Math.round(maxS*ppt*2.5)));
+  const I=markImg(c,Math.max(24,Math.round(maxS*ppt*2.5))); lap("prep");
   /* Second anchor across the page from the code: the section number block (PDF: 26 x 22 pt at x 36, y 112). With both, the page's
      tilt and scale are known well enough that the first rows can't be mistaken for their neighbours. */
   const SB={x:49,y:123,hw:13,hh:11}, RULE={x0:36,x1:576,y:96};
@@ -2827,8 +2902,15 @@ async function readPageLocal(blob,cl,N,L){
     const vOf=(k,th)=>{ const cs=Math.cos(th), sn=Math.sin(th); return [(e1[0]*cs-e1[1]*sn)*E*k,(e1[0]*sn+e1[1]*cs)*E*k]; };
     /* Coarse grid first, on the first four rows (short enough that a rough angle and spacing still land near each box), each
        allowed a couple of pixels off so a thin outline isn't stepped over; then all eight rows, exactly. */
-    const fit=(v,dx,dy,tol)=>{ let t=0; for(const r of tol?top.slice(0,4):top){ const h=r.s/2, x=blk.x+dx+(r.x-SB.x)*lx[0]+(r.y-SB.y)*v[0], y=blk.y+dy+(r.x-SB.x)*lx[1]+(r.y-SB.y)*v[1]; let bm=-0.3;
-      for(const oy of tol?[-2,0,2]:[0]) for(const ox of tol?[-2,0,2]:[0]){ const m=boxFit(I,x+ox,y+oy,[lx[0]*h,lx[1]*h],[v[0]*h,v[1]*h],true); if(m && m.score>bm) bm=Math.min(1,m.score); } t+=bm; } return t; };
+    /* On the coarse grid, neighbouring shifts overlap (each row is tried 2 px either side), so for one spacing and angle each
+       spot is measured once and remembered. */
+    let memoV=null, memo=null; const top4=top.slice(0,4);
+    const fit=(v,dx,dy,tol)=>{ let t=0; if(tol && memoV!==v){ memoV=v; memo=new Map(); } const R=tol?top4:top;
+      for(let ri=0;ri<R.length;ri++){ const r=R[ri], h=r.s/2, x=blk.x+dx+(r.x-SB.x)*lx[0]+(r.y-SB.y)*v[0], y=blk.y+dy+(r.x-SB.x)*lx[1]+(r.y-SB.y)*v[1]; let bm=-0.3;
+        for(const oy of tol?[-2,0,2]:[0]) for(const ox of tol?[-2,0,2]:[0]){ let sc;
+          if(tol){ const key=(ri*256+(dx+ox+128))*256+(dy+oy+128); sc=memo.get(key); if(sc===undefined){ const m=boxFit(I,x+ox,y+oy,[lx[0]*h,lx[1]*h],[v[0]*h,v[1]*h],true); sc=m?m.score:null; memo.set(key,sc); } }
+          else { const m=boxFit(I,x+ox,y+oy,[lx[0]*h,lx[1]*h],[v[0]*h,v[1]*h],true); sc=m?m.score:null; }
+          if(sc!==null && sc>bm) bm=Math.min(1,sc); } t+=bm; } return t; };
     let best=null; const S=Math.round(Math.max(6,6*ppt));
     const tryAll=(ks,ths,sx0,sy0,R,st,tol)=>{ for(const k of ks) for(const th of ths){ const v=vOf(k,th);
       for(let dy=sy0-R;dy<=sy0+R;dy+=st) for(let dx=sx0-R;dx<=sx0+R;dx+=st){ const t=fit(v,dx,dy,tol); if(!best||t>best.t) best={t,k,th,dx,dy,v}; } } };
@@ -2856,11 +2938,15 @@ async function readPageLocal(blob,cl,N,L){
           const g1=Object.assign({},g); for(let i=-2;i<=2;i++) for(let j=-2;j<=2;j++) if(i||j) tryG({k:g1.k*(1+d*i/7.5), th:g1.th+d*j/7.5, c:0, cv:0, cu:0},sub); }
         /* then perspective (rows closer together toward the far end), keeping the top rows where they are */
         const g0=Object.assign({},g); for(let c=-6e-4;c<=6.01e-4;c+=1e-4) if(Math.abs(c)>1e-9) tryG({k:g0.k*(1+c*dm), th:g0.th, c, cv:0, cu:0});
-        const gc=Object.assign({},g); for(let i=-3;i<=3;i++) for(let j=-3;j<=3;j++) if(i||j) tryG({k:gc.k*(1+0.004*i), th:gc.th+0.004*j, c:gc.c, cv:0, cu:0});
-        const g1=Object.assign({},g); for(let cv=-R;cv<=R;cv+=Math.max(2,R/4)) for(let cu=-R;cu<=R;cu+=Math.max(2,R/4)) tryG({k:g1.k, th:g1.th, c:g1.c, cv, cu});
+        /* then spacing and angle once more, and the bend along and across the column: one at a time, twice over */
+        for(let it=0;it<2;it++){ let g0=Object.assign({},g); for(let i=-3;i<=3;i++) if(i) tryG({k:g0.k*(1+0.004*i), th:g0.th, c:g0.c, cv:g0.cv, cu:g0.cu});
+          g0=Object.assign({},g); for(let j=-3;j<=3;j++) if(j) tryG({k:g0.k, th:g0.th+0.004*j, c:g0.c, cv:g0.cv, cu:g0.cu}); }
+        for(let it=0;it<2;it++){ let g0=Object.assign({},g); for(let cv=-R;cv<=R;cv+=Math.max(2,R/4)) tryG({k:g0.k, th:g0.th, c:g0.c, cv, cu:g0.cu});
+          g0=Object.assign({},g); for(let cu=-R;cu<=R;cu+=Math.max(2,R/4)) tryG({k:g0.k, th:g0.th, c:g0.c, cv:g0.cv, cu}); }
         const g2=Object.assign({},g); for(const k of [-0.006,-0.003,0,0.003,0.006]) for(const th of [-0.006,-0.003,0,0.003,0.006]) tryG({k:g2.k+k, th:g2.th+th, c:g2.c, cv:g2.cv, cu:g2.cu});
         colFit=true; } else g.t=0;
       map0=at(g.k,g.th,g.c,g.cv,g.cu); } }
+  lap("lineup");   /* section block, rule, top rows and the whole-column fit */
   /* Reading the rows, from a starting page model: the whole-column fit (colFit) or the anchors alone. */
   const readWith=(map0,colFit)=>{
   const pairs=[]; let map=map0;
@@ -2963,8 +3049,8 @@ async function readPageLocal(blob,cl,N,L){
      reads the page, that one is used; where both do, a row counts only if both looked at the same box and agree (one sure,
      the other unsure, counts as sure); anything else is left for a person to check. */
   const done=r=>r.items?{page:r.page, items:r.items}:r;
-  const B=readWith(map0P,false); if(!colFit) return done(B);
-  const A=readWith(map0,true); if(!A.items) return done(B); if(!B.items) return done(A);
+  const B=readWith(map0P,false); if(!colFit){ lap("rows"); return done(B); }
+  const A=readWith(map0,true); lap("rows"); if(!A.items) return done(B); if(!B.items) return done(A);
   /* How well each reading's rows sit on printed box outlines (marker inside doesn't count against it). A model that's lost
      puts rows between boxes; when one reading clearly sits better, it's used on its own. */
   const onBox=([x,y,a,b])=>{ let bm=-0.3; for(const dy of [-2,0,2]) for(const dx of [-2,0,2]){ const m=boxFit(I,x+dx,y+dy,a,b,true); if(m && m.score>bm) bm=Math.min(1,m.score); } return bm; };
@@ -2993,12 +3079,40 @@ async function readPageLocal(blob,cl,N,L){
   return {page:pg.page, items};
 }
 /* All photos of one scan → the same shape the AI reader returned, plus warnings and the photos that couldn't be read. */
+/* The page reader runs in a background worker where the browser allows it, so the camera view keeps checking frames while a
+   page is being read (reading on the page itself held the camera up for most of a second). The worker gets the same
+   functions, copied as they are, so it reads exactly the same; if it can't start, pages are read here as before. */
+let ckW=null, ckWBad=false, ckWSeq=0; const ckWJobs={};
+function ckReader(){
+  if(ckW || ckWBad || typeof Worker==="undefined" || typeof OffscreenCanvas==="undefined") return ckW;
+  try{ const fns=[polyfit,markImg,boxFit,boxFitAt,blockFit,affFit,homFit,followRule,boxSearch,boxInk,clQrParse,qrTilt,qrNear,qrQuick,readPageLocal];
+    const src=`self.window=self; const document={createElement:()=>new OffscreenCanvas(1,1)};
+importScripts(${JSON.stringify(JSQR_URL)});
+const MARK=${JSON.stringify(MARK)}, CL_QR_BOX=${JSON.stringify(CL_QR_BOX)}, BOXT=${JSON.stringify(BOXT)}, BOXSIDES=${JSON.stringify(BOXSIDES)}, BOXOUT=new Float32Array(12);
+${fns.map(f=>f.toString()).join("\n")}
+onmessage=async e=>{ const {id,blob,cl,N,L,hint}=e.data; let out; const tm={}; try{ out=await readPageLocal(blob,cl,N,L,hint,tm); }catch(err){ postMessage({id,err:String(err&&err.message||err)}); return; } postMessage({id,out,tm}); };`;
+    const url=URL.createObjectURL(new Blob([src],{type:"text/javascript"})); ckW=new Worker(url); URL.revokeObjectURL(url);
+    ckW.onmessage=e=>{ const j=ckWJobs[e.data.id]; if(!j) return; delete ckWJobs[e.data.id]; if(e.data.err) j.rej(new Error(e.data.err)); else { if(j.tm) Object.assign(j.tm,e.data.tm||{}); j.res(e.data.out); } };
+    ckW.onerror=e=>{ ckWBad=true; try{ ckW.terminate(); }catch(x){} ckW=null; Object.values(ckWJobs).forEach(j=>j.rej(new Error("worker"))); for(const k in ckWJobs) delete ckWJobs[k]; };
+  }catch(e){ ckWBad=true; ckW=null; }
+  return ckW;
+}
+async function readPageAny(blob,cl,N,L,hint,tm){
+  const w=ckReader();
+  if(w){ const n={secs:N.secs.map(s=>({rows:s.rows.map(r=>({no:r.no, it:{id:r.it.id}}))}))}, c={code:cl.code, version:cl.version};
+    try{ const out=await new Promise((res,rej)=>{ const id=++ckWSeq; ckWJobs[id]={res,rej,tm}; w.postMessage({id,blob,cl:c,N:n,L,hint:hint||null}); setTimeout(()=>{ if(ckWJobs[id]){ delete ckWJobs[id]; rej(new Error("worker timed out")); } },20000); }); if(tm) tm.reader="worker"; return out; }
+    catch(e){ console.warn("reader worker, reading here instead",e); ckWBad=true; } }
+  if(tm) tm.reader="page";
+  return readPageLocal(blob,cl,N,L,hint,tm);
+}
 async function readSheetsLocal(cl,N,blobs,signal){
   try{ await Promise.all([loadJsQr(), loadPdfLib()]); }catch(e){ throw {code:"reader_unavailable"}; }
   const L=await rowLayout(cl), out={sheet:(cl.code||"")+"-v"+(cl.version||1), items:[], notes:"", warns:[], unread:[], fails:[], perPhoto:[]}, seen=new Set();
   for(const b of blobs){
     if(signal && signal.aborted) throw {code:"cancelled"};
-    let r; try{ r=await readPageLocal(b,cl,N,L); }catch(e){ console.warn("read page",e); r={warn:"failed"}; }
+    const rec=picRec.get(b), tm={}, t0=Date.now(); if(rec) rec.tm=Object.assign(rec.tm||{},{readStart:t0, read:tm});
+    let r; try{ r=await readPageAny(b,cl,N,L,qsHints.get(b),tm); }catch(e){ console.warn("read page",e); r={warn:"failed"}; }
+    if(rec){ rec.tm.readEnd=Date.now(); delete tm._t; }
     out.perPhoto.push(r.items? {page:r.page, read:Object.fromEntries(r.items.map(x=>[x.no,x.state]))} : {page:r.page||null, warn:r.warn});
     if(r.items){ if(seen.has(r.page)) { out.warns.push(`Page ${r.page} was in more than one photo; the first one was used.`); continue; } seen.add(r.page); out.items.push(...r.items); continue; }
     out.unread.push(b); out.fails.push(r);
@@ -3015,10 +3129,13 @@ async function readSheetsLocal(cl,N,blobs,signal){
    match's photos can be downloaded together: real sheets to test the page reader with. Nothing is uploaded. */
 const scanPics={}, picRec=new WeakMap(), picOfFile=new WeakMap();
 const picKey=t=>t.matchId?"m:"+t.matchId : t.run&&t.run.id?"r:"+t.run.id : "l:"+t.label;
+/* Timing of each step for each photo (never shown in the app; written to timing.csv in the downloaded photos) */
+const picTime=new WeakMap();
+function scanPicsTime(blob,tm){ const rec=picRec.get(blob); if(rec) rec.tm=Object.assign(rec.tm||{},tm); else picTime.set(blob,Object.assign(picTime.get(blob)||{},tm)); }
 function scanPicsAdd(t,cl,blob,page,via){
   const k=picKey(t), g=scanPics[k]||(scanPics[k]={label:t.label, list:[]});
   g.sheet=(cl.code||"")+"-v"+(cl.version||1);
-  const rec={blob, page:page||null, at:now(), via, read:null}; g.list.push(rec); picRec.set(blob,rec); return rec;
+  const rec={blob, page:page||null, at:now(), via, read:null, tm:picTime.get(blob)||{}}; g.list.push(rec); picRec.set(blob,rec); return rec;
 }
 function scanPicsNote(imgs,out){ (out&&out.perPhoto||[]).forEach((p,i)=>{ const rec=picRec.get(imgs[i]); if(rec){ rec.read=p; if(p.page&&!rec.page) rec.page=p.page; } }); }
 const runPicT=run=>({matchId:run.matchId||null, run, label:run.label});   /* a match checklist as a scan target, for its photos */
@@ -3039,6 +3156,19 @@ function zipStore(files){
   end.setUint32(0,0x06054b50,true); end.setUint16(8,files.length,true); end.setUint16(10,files.length,true); end.setUint32(12,size,true); end.setUint32(16,off,true);
   return new Blob([...parts,...dir,end],{type:"application/zip"});
 }
+/* One row per photo. Live camera times are in ms after the sheet arrived (the first movement after the camera last showed a
+   still view with no page code); the reading times after the photo was taken. */
+function scanTimingCsv(files){
+  const H=["file","page","via","taken_at","code_seen_ms","code_looks","code_look_ms","code_found_by","still_from_ms","photo_taken_ms","photo_saved_ms",
+    "read_wait_ms","read_ms","reader","read_open_ms","read_code_ms","read_code_how","read_prep_ms","read_lineup_ms","read_rows_ms","result"];
+  const q=v=>v==null||v===""?"":/[",\n]/.test(String(v))?`"${String(v).replace(/"/g,'""')}"`:String(v);
+  const rows=files.map(f=>{ const r=f.rec, t=r.tm||{}, L=t.live||null, R=t.read||{}, c=L&&L.code;
+    const base=L? (L.arrive && (!c || L.arrive<=c.at) ? L.arrive : c? c.at : L.taken) : r.at, rel=x=>x? x-base : "", saved=L&&L.saved||r.at;
+    const res=r.read? (r.read.warn? "not read: "+r.read.warn : "read") : "";
+    return [f.name, r.page||"", r.via, new Date(r.at).toISOString(), L&&c?rel(c.at):"", c?c.scans:"", c?c.ms:"", c?c.how:"", L&&L.still?rel(L.still):"", L?rel(L.taken):"", L?rel(L.saved):"",
+      t.readStart?t.readStart-saved:"", t.readStart&&t.readEnd?t.readEnd-t.readStart:"", R.reader||"", R.open, R.code, R.codeHow, R.prep, R.lineup, R.rows, res].map(q).join(","); });
+  return H.join(",")+"\n"+rows.join("\n")+"\n";
+}
 async function scanPicsDownload(t){
   const g=scanPics[picKey(t)]; if(!g||!g.list.length){ toast("No scan photos from this match on this device."); return; }
   const files=[], seen={};
@@ -3049,6 +3179,7 @@ async function scanPicsDownload(t){
   const info={match:g.label, sheet:g.sheet, downloadedAt:new Date().toISOString(),
     photos:files.map(f=>({file:f.name, page:f.rec.page, takenAt:new Date(f.rec.at).toISOString(), via:f.rec.via, read:f.rec.read}))};
   files.push({name:"scan.json", data:new TextEncoder().encode(JSON.stringify(info,null,2))});
+  files.push({name:"timing.csv", data:new TextEncoder().encode(scanTimingCsv(files.filter(f=>f.rec)))});
   const d=new Date(), when=`${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}-${pad2(d.getHours())}${pad2(d.getMinutes())}`;
   await downloads.save({filename:`${String(g.label||"match").replace(/[^\w.]+/g,"-").replace(/^-+|-+$/g,"")}-scan-photos-${when}.zip`, data:zipStore(files)});
   toast(`Downloaded ${g.list.length} photo${g.list.length===1?"":"s"}`);
@@ -3056,7 +3187,7 @@ async function scanPicsDownload(t){
 const qs={};
 function qsReset(){ Object.assign(qs,{t:null,v:"",cl:null,N:null,need:0,secNos:[],shots:0,pending:[],reading:Promise.resolve(),res:{items:{},warns:new Set(),sheet:"",notes:[]},errs:[],failed:[],
   blobs:{}, stream:null,timer:0,wake:null,desk:false,state:"seek",prev:null,ref:null,stable:0,peak:0,closed:false,finishing:false,live:false,undo:null,cv:null,endTimer:0,
-  want:new Set(),captured:new Set(),seen:null,qrBusy:false,qc:null,decode:null,decErr:false,again:null,checking:false,steepAt:0}); }
+  want:new Set(),captured:new Set(),seen:null,qrBusy:false,qc:null,decode:null,decErr:false,again:null,checking:false,steepAt:0,stillAt:0,prevAt:0,okPage:null,okAt:0,arriveAt:0,codeAt:{},scanN:0}); }
 function qsPickTarget(){
   const cur=activeRun(), ok=r=>r&&S.checklists[r.checklistId], nm=nextMatch();
   if(ok(cur) && !runScans(cur).length) return "r:"+cur.id;
@@ -3091,7 +3222,7 @@ function qsOpen(){
       <label class="sr" for="qs-sel">Change match</label>
       <select id="qs-sel" class="qs-sel">${runs.length?`<optgroup label="Started">${runs.map(r=>`<option value="r:${r.id}">${esc(r.label)}</option>`).join("")}</optgroup>`:""}${ups.length?`<optgroup label="Upcoming (starts a new checklist)">${ups.map(m=>`<option value="m:${m.id}">${esc(mlabel(m))}</option>`).join("")}</optgroup>`:""}</select>
     </div>
-    <div class="qs-stage"><video id="qs-v" playsinline muted autoplay></video><div class="qs-frame" aria-hidden="true"></div><div class="qs-flash" id="qs-flash"></div>
+    <div class="qs-stage"><video id="qs-v" playsinline muted autoplay></video><div class="qs-frame" aria-hidden="true"></div><div class="qs-flash" id="qs-flash"></div><div class="qs-ok" id="qs-ok" hidden aria-live="assertive"></div>
       <div class="qs-msg" id="qs-msg" aria-live="polite">Starting camera…</div></div>
     <div class="qs-bottom">
       <div class="qs-prog"><span id="qs-count" class="qs-count"></span><span class="qs-chips" id="qs-chips"></span></div>
@@ -3152,7 +3283,7 @@ async function qsStartCamera(){
   const tr=qs.stream.getVideoTracks()[0]; try{ await tr.applyConstraints({advanced:[{focusMode:"continuous"}]}); }catch(e){}
   try{ if(navigator.wakeLock) qs.wake=await navigator.wakeLock.request("screen"); }catch(e){}
   qsMsg("Show any checklist page. Keep its QR code in view");
-  qs.timer=setInterval(qsTick,140);
+  qs.timer=setInterval(qsTick,QS_TICK);
 }
 function qsStopCam(){ clearInterval(qs.timer); qs.timer=0; if(qs.stream){ qs.stream.getTracks().forEach(t=>t.stop()); qs.stream=null; } try{ if(qs.wake) qs.wake.release(); }catch(e){} qs.wake=null; }
 function qsFallback(gesture){
@@ -3169,13 +3300,42 @@ function qsFallback(gesture){
 }
 function qsFbLabel(){ const t=$("#qs-fbt"); if(t) t.innerHTML=qs.desk?`${ICON.image}Choose this match's page photos`:`${ICON.camera}Take photo of page ${Math.min(qs.shots+1,qs.need)}`; }
 /* look for a page code a few times a second (larger frame than the quality check) */
+/* Looking for the page code on the live camera runs in its own worker where the browser allows it (jsQR on a whole frame took
+   up to a third of a second, holding up everything else on screen). A mounted camera sees each sheet in about the same
+   place, so the worker first reads a full-size crop where the code was last seen, and only then the whole frame. */
+let qrW=null, qrWBad=false, qrWSeq=0; const qrWJobs={};
+function qsQrWorker(){
+  if(qrW || qrWBad || typeof Worker==="undefined" || typeof OffscreenCanvas==="undefined" || typeof createImageBitmap==="undefined" || ("BarcodeDetector" in window)) return qrW;   /* the browser's own detector already works off the page */
+  try{ const src=`self.window=self; importScripts(${JSON.stringify(JSQR_URL)});
+const cv=new OffscreenCanvas(1,1), cx=cv.getContext("2d",{willReadFrequently:true});
+const read=(bm,x,y,w,h,W,H,sw,sh)=>{ cv.width=sw; cv.height=sh; cx.drawImage(bm,x,y,w,h,0,0,sw,sh); const d=cx.getImageData(0,0,sw,sh), r=jsQR(d.data,sw,sh,{inversionAttempts:"dontInvert"}); if(!r) return null;
+  const f=p=>({x:(x+p.x*w/sw)/W, y:(y+p.y*h/sh)/H}), L=r.location, tl=f(L.topLeftCorner), tr=f(L.topRightCorner), br=f(L.bottomRightCorner), bl=f(L.bottomLeftCorner);
+  return {t:r.data, quad:[tl,tr,br,bl], cx:(tl.x+tr.x+br.x+bl.x)/4, cy:(tl.y+tr.y+br.y+bl.y)/4, tl, tr, bl, s:Math.hypot((bl.x-tl.x)*W,(bl.y-tl.y)*H)/H}; };
+onmessage=e=>{ const {id,bm,near,full}=e.data, W=bm.width, H=bm.height; let hit=null, how="";
+  try{ if(near){ const m=Math.max(near.w*W,near.h*H)*0.9+24, x=Math.max(0,Math.floor(near.x*W-m)), y=Math.max(0,Math.floor(near.y*H-m)), x2=Math.min(W,Math.ceil((near.x+near.w)*W+m)), y2=Math.min(H,Math.ceil((near.y+near.h)*H+m));
+      if(x2-x>=32 && y2-y>=32){ hit=read(bm,x,y,x2-x,y2-y,W,H,x2-x,y2-y); how="near"; } }
+    if(!hit){ const sw=full?W:Math.min(1280,W), sh=Math.round(sw*H/W); hit=read(bm,0,0,W,H,W,H,sw,sh); how="frame"; } }catch(err){}
+  try{ bm.close(); }catch(err){} postMessage({id, hits:hit?[hit]:[], how}); };`;
+    const url=URL.createObjectURL(new Blob([src],{type:"text/javascript"})); qrW=new Worker(url); URL.revokeObjectURL(url);
+    qrW.onmessage=e=>{ const j=qrWJobs[e.data.id]; if(j){ delete qrWJobs[e.data.id]; j(e.data); } };
+    qrW.onerror=()=>{ qrWBad=true; try{ qrW.terminate(); }catch(x){} qrW=null; Object.values(qrWJobs).forEach(j=>j(null)); for(const k in qrWJobs) delete qrWJobs[k]; };
+  }catch(e){ qrWBad=true; qrW=null; }
+  return qrW;
+}
 async function qsScanQr(){
   const v=$("#qs-v"); if(qs.qrBusy || !qs.decode || !v || !v.videoWidth) return; qs.qrBusy=true;
   /* A smaller copy reads faster; when it finds no page code, the next look is at the camera's full size (a mounted camera
      can't move closer, and a small code needs every pixel), and it stays there while that keeps working. */
-  try{ const w=qs.qrFull? v.videoWidth : Math.min(1280,v.videoWidth), h=Math.round(w*v.videoHeight/v.videoWidth), c=qs.qc||(qs.qc=document.createElement("canvas"));
-    if(c.width!==w||c.height!==h){ c.width=w; c.height=h; } c.getContext("2d",{willReadFrequently:true}).drawImage(v,0,0,w,h);
-    const hits=await qs.decode(c), p=qsPageOf(hits); qs.seen={p, any:hits.length>0, at:Date.now()}; if(!p && v.videoWidth>1280) qs.qrFull=!qs.qrFull; }catch(e){}
+  const at=Date.now(); qs.scanN=(qs.scanN||0)+1; let how="page";   /* when this frame was taken: a photo is only accepted if its page code was read on a frame taken while the view held still */
+  try{ let hits=null; const w=qsQrWorker();
+    if(w){ const bm=await createImageBitmap(v), r=await new Promise(res=>{ const id=++qrWSeq; qrWJobs[id]=res; w.postMessage({id,bm,near:qs.near,full:qs.qrFull},[bm]); setTimeout(()=>{ if(qrWJobs[id]){ delete qrWJobs[id]; res(null); } },3000); });
+      if(r){ hits=r.hits; how=r.how||"worker"; } }
+    if(!hits){ const w2=qs.qrFull? v.videoWidth : Math.min(1280,v.videoWidth), h2=Math.round(w2*v.videoHeight/v.videoWidth), c=qs.qc||(qs.qc=document.createElement("canvas"));
+      if(c.width!==w2||c.height!==h2){ c.width=w2; c.height=h2; } c.getContext("2d",{willReadFrequently:true}).drawImage(v,0,0,w2,h2); hits=await qs.decode(c); how=("BarcodeDetector" in window)?"native":"page"; }
+    const p=qsPageOf(hits); qs.seen={p, any:hits.length>0, at:Date.now(), frameAt:at};
+    if(p && qs.codeAt && !qs.codeAt[p.page]) qs.codeAt[p.page]={at, scans:qs.scanN, ms:Date.now()-at, how};   /* for the timing file */
+    if(p && p.hit && p.hit.quad){ const xs=p.hit.quad.map(q=>q.x), ys=p.hit.quad.map(q=>q.y); qs.near={x:Math.min(...xs), y:Math.min(...ys), w:Math.max(...xs)-Math.min(...xs), h:Math.max(...ys)-Math.min(...ys)}; }
+    if(!p && v.videoWidth>1280) qs.qrFull=!qs.qrFull; }catch(e){}
   qs.qrBusy=false;
 }
 /* frame quality + page code: only a visible, new, steady, sharp checklist page is taken */
@@ -3183,7 +3343,7 @@ async function qsScanQr(){
    (cos of the tilt = short side / long side). The code is small, so this is rough: about 10 degrees high, give or take 10.
    It only stops clearly steep shots (and only for a few seconds); whether a page really reads is checked once it's taken.
    Size and place: the code is 70 pt on a 612 x 792 pt page. */
-const QS_TILT_MAX=45;
+const QS_TILT_MAX=45, QS_TICK=70, QS_STILL=300;   /* frame checks every 70 ms; a photo needs 300 ms of holding still */
 function qrTilt(P){   /* P: the code's 4 corners in order; degrees, averaged over the corners */
   let t=0, side=0;
   for(let i=0;i<4;i++){ const p0=P[i], p1=P[(i+1)%4], p3=P[(i+3)%4], e1=[p1[0]-p0[0],p1[1]-p0[1]], e2=[p3[0]-p0[0],p3[1]-p0[1]];
@@ -3206,8 +3366,24 @@ function qsTick(){
   const v=$("#qs-v"); if(!v || v.readyState<2 || qs.finishing || !v.videoWidth) return;
   qsScanQr();
   if(!qs.decode){ qsMsg(qs.decErr?"The page-code reader didn't load. Check the connection, or use the round button to take each page.":"Getting ready…"); return; }
+  /* Every check measures the frame (a small copy): brightness, sharpness, and how much it moved since the last check. Measured
+     even before a page code is in view, so the first frame that shows one already has a frame to compare with. */
+  const w=200, h=Math.max(1,Math.round(w*v.videoHeight/v.videoWidth));
+  const c=qs.cv||(qs.cv=document.createElement("canvas")); if(c.width!==w||c.height!==h){ c.width=w; c.height=h; }
+  const x=c.getContext("2d",{willReadFrequently:true}); x.drawImage(v,0,0,w,h);
+  const d=x.getImageData(0,0,w,h).data, g=new Float32Array(w*h);
+  for(let i=0,j=0;i<g.length;i++,j+=4) g[i]=.299*d[j]+.587*d[j+1]+.114*d[j+2];
+  const x0=Math.round(w*.1), x1=Math.round(w*.9), y0=Math.round(h*.1), y1=Math.round(h*.9);
+  let n=0,sum=0,lap=0;
+  for(let yy=y0+1;yy<y1-1;yy++) for(let xx=x0+1;xx<x1-1;xx++){ const i=yy*w+xx, p=g[i]; n++; sum+=p; lap+=Math.abs(4*p-g[i-1]-g[i+1]-g[i-w]-g[i+w]); }
+  const mean=sum/n, sharp=lap/n;
+  const dif=(a,b)=>{ if(!a||a.length!==b.length) return 255; let s=0,k=0; for(let i=0;i<b.length;i+=3,k++) s+=Math.abs(b[i]-a[i]); return s/k; };
+  const nowT=Date.now(), move=dif(qs.prev,g), prevAt=qs.prevAt; qs.prev=g; qs.prevAt=nowT;
   const seen=qs.seen && Date.now()-qs.seen.at<900 ? qs.seen : null, pg=seen&&seen.p;
-  qsFrame("");
+  if(move>5 && !qs.arriveAt) qs.arriveAt=nowT; else if(!pg && move<=5) qs.arriveAt=0;   /* timing file: a sheet arrives with the first movement after an empty, still view */
+  { const ok=$("#qs-ok"); if(ok && !ok.hidden && !qs.checking){ const bad=ok.classList.contains("bad");   /* a new sheet in view: the panel gives way */
+      if(pg && (bad? Date.now()-qs.okAt>1500 : pg.page!==qs.okPage && !qs.captured.has(pg.page))) qsHideOk(); else if(bad && Date.now()-qs.okAt>6000) qsHideOk(); } }
+  qsFrame(qs.okPage!=null?"good":"");   /* frame stays green while the "got it" panel shows */
   const again=qs.again && Date.now()-qs.again.at<6000 ? qs.again : null;
   if(!pg){ qs.stable=0; qs.peak=0; qsMsg(again?again.msg : seen&&seen.any?"That QR code isn't a checklist page":`Show a checklist page. Keep its QR code in view${qs.captured.size?` (${qs.want.size-[...qs.want].filter(n=>qs.captured.has(n)).length} to go)`:""}`); return; }
   if(pg.code!==String(qs.cl.code).toUpperCase()){ qs.stable=0; qsMsg(`That page is from a different checklist (${pg.code})`); return; }
@@ -3220,26 +3396,22 @@ function qsTick(){
   const soft=fr && (fr.tilt>QS_TILT_MAX || fr.fit==="far"); if(!soft) qs.steepAt=0; else if(!qs.steepAt) qs.steepAt=Date.now();
   if(fr && (fr.fit==="close" || fr.fit==="out" || (soft && Date.now()-qs.steepAt<4000))){ qs.stable=0; qs.peak=0; qsFrame("warn");   /* steep for 4 s: take it anyway, the reader decides */
     qsMsg(fr.fit==="close"||fr.fit==="out"?`${label}: move back so the whole page is in view` : fr.fit==="far"?`${label}: move closer so the page fills the frame` : `${label}: hold the phone flatter, straight over the page`); return; }
-  const w=200, h=Math.max(1,Math.round(w*v.videoHeight/v.videoWidth));
-  const c=qs.cv||(qs.cv=document.createElement("canvas")); if(c.width!==w||c.height!==h){ c.width=w; c.height=h; }
-  const x=c.getContext("2d",{willReadFrequently:true}); x.drawImage(v,0,0,w,h);
-  const d=x.getImageData(0,0,w,h).data, g=new Float32Array(w*h);
-  for(let i=0,j=0;i<g.length;i++,j+=4) g[i]=.299*d[j]+.587*d[j+1]+.114*d[j+2];
-  const x0=Math.round(w*.1), x1=Math.round(w*.9), y0=Math.round(h*.1), y1=Math.round(h*.9);
-  let n=0,sum=0,lap=0;
-  for(let yy=y0+1;yy<y1-1;yy++) for(let xx=x0+1;xx<x1-1;xx++){ const i=yy*w+xx, p=g[i]; n++; sum+=p; lap+=Math.abs(4*p-g[i-1]-g[i+1]-g[i-w]-g[i+w]); }
-  const mean=sum/n, sharp=lap/n;
-  const dif=(a,b)=>{ if(!a||a.length!==b.length) return 255; let s=0,k=0; for(let i=0;i<b.length;i+=3,k++) s+=Math.abs(b[i]-a[i]); return s/k; };
-  const move=dif(qs.prev,g); qs.prev=g;
   if(mean<45){ qs.stable=0; qsMsg("Too dark. Move to more light"); return; }
   if(move>5){ qs.stable=0; qs.peak=0; qsMsg(`${label}: hold still…`); return; }
+  if(!qs.stable) qs.stillAt=prevAt||nowT;   /* held still since the frame before this one */
   qs.stable++; if(sharp>qs.peak) qs.peak=sharp;
   /* glare doesn't hold the photo back: a mounted camera can't tilt, the reader marks boxes under glare Unclear, and a page it
      can't read is asked for again */
-  const good=qs.stable>=4 && sharp>=Math.max(3.5,qs.peak*0.85);
-  if(good || qs.stable>=18) qsCapture(g,pg.page);   /* after ~2.5 s steady, take it anyway */
+  /* Take it once the view has held still for QS_STILL and the page code was read on a frame from that still spell (so a sheet
+     just taken away, whose code was seen a moment ago, can't be taken as the empty table) */
+  const stillFor=nowT-qs.stillAt, codeNow=!!(seen && seen.frameAt>=qs.stillAt);
+  const good=stillFor>=QS_STILL && codeNow && sharp>=Math.max(3.5,qs.peak*0.85);
+  if(good || (codeNow && stillFor>=2500)) qsCapture(g,pg.page);   /* after 2.5 s still, take it anyway */
   else { qsFrame("good"); qsMsg(`${label}: good. Hold still…`); }
 }
+const qsHints=new WeakMap();   /* photo -> where its page code was in the live view (as fractions of the photo) */
+/* a point in the camera frame (fractions) to where it lands after the photo is turned k quarter turns clockwise */
+const qsRotPt=(p,k)=>k===1?{x:1-p.y,y:p.x} : k===2?{x:1-p.x,y:1-p.y} : k===3?{x:p.y,y:1-p.x} : {x:p.x,y:p.y};
 async function qsCapture(g,page){
   const v=$("#qs-v"); if(!v || !v.videoWidth || qs.finishing) return;
   const seenP=qs.seen && Date.now()-qs.seen.at<900 && qs.seen.p;
@@ -3250,10 +3422,28 @@ async function qsCapture(g,page){
   qs.stable=0; qs.peak=0;
   const sc=Math.min(1,2200/Math.max(v.videoWidth,v.videoHeight)), c=document.createElement("canvas");
   c.width=Math.round(v.videoWidth*sc); c.height=Math.round(v.videoHeight*sc); c.getContext("2d").drawImage(v,0,0,c.width,c.height);
-  const blob=await new Promise(r=>qsRotate(c,k).toBlob(r,"image/jpeg",.9)); if(!blob){ if(page!=null) qs.captured.delete(page); return; }
-  qsFlashIt(); qsAddShot(blob,page,false);
-  if(page!=null && !qs.finishing) qsMsg(`Got ${page} ${qsSecName(page)}. Show the next page`);
+  const tTaken=Date.now(), live=page!=null?{arrive:qs.arriveAt||0, code:qs.codeAt&&qs.codeAt[page]||null, still:qs.stillAt||0, taken:tTaken}:{taken:tTaken};
+  qs.arriveAt=0; qs.codeAt={}; qs.scanN=0;
+  /* the frame is in hand: the page can come out now (saving it as a photo carries on behind) */
+  qsFlashIt(); if(page!=null && !qs.finishing){ qsMsg(`Got ${page} ${qsSecName(page)}. Show the next page`); qsShowOk(page); }
+  const blob=await new Promise(r=>qsRotate(c,k).toBlob(r,"image/jpeg",.9)); if(!blob){ if(page!=null){ qs.captured.delete(page); qsHideOk(); qsProg(); } return; }
+  if(seenP && seenP.hit && seenP.hit.quad && seenP.page===page){ const Q=seenP.hit.quad.map(q=>qsRotPt(q,k)), xs=Q.map(q=>q.x), ys=Q.map(q=>q.y);
+    qsHints.set(blob,{x:Math.min(...xs), y:Math.min(...ys), w:Math.max(...xs)-Math.min(...xs), h:Math.max(...ys)-Math.min(...ys)}); }
+  live.saved=Date.now(); scanPicsTime(blob,{live});   /* before it's queued for reading */
+  qsAddShot(blob,page,false);
 }
+/* Photo taken: a big green panel over the camera view, a short beep, and how many pages are in. It stays until a new sheet's
+   code is seen, so it's always clear the last one can come out. */
+function qsShowOk(page){ const el=$("#qs-ok"); if(!el) return;
+  const n=[...qs.want].filter(x=>qs.captured.has(x)).length, last=[...qs.want].every(x=>qs.captured.has(x));
+  el.className="qs-ok"; el.innerHTML=`<span class="qs-okc">${ICON.check}</span><b>Got ${esc(page)} ${esc(qsSecName(page))}</b><span>${last?"That's the last page. Checking it…":"Take it out and put in the next page"}</span><span class="qs-okn">${n} of ${qs.want.size} pages</span>`;
+  el.hidden=false; qs.okPage=page; qs.okAt=Date.now(); qsBeep(); }
+function qsHideOk(){ const el=$("#qs-ok"); if(el && !el.hidden){ el.hidden=true; el.innerHTML=""; } qs.okPage=null; }
+function qsShowBad(page,msg){ const el=$("#qs-ok"); if(!el) return; el.className="qs-ok bad"; el.innerHTML=`<span class="qs-okc">${ICON.x}</span><b>Put ${esc(page)} ${esc(qsSecName(page))} back</b><span>${esc(msg)}</span>`; el.hidden=false; qs.okPage=null; qs.okAt=Date.now(); }
+let qsAudio=null;
+function qsBeep(){ try{ const A=window.AudioContext||window.webkitAudioContext; if(!A) return; const a=qsAudio||(qsAudio=new A()); if(a.state==="suspended") a.resume();
+  const o=a.createOscillator(), g=a.createGain(), t=a.currentTime; o.type="sine"; o.frequency.setValueAtTime(880,t); o.frequency.setValueAtTime(1320,t+0.09);
+  g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.25,t+0.02); g.gain.exponentialRampToValueAtTime(0.0001,t+0.22); o.connect(g); g.connect(a.destination); o.start(t); o.stop(t+0.24); }catch(e){} }
 function qsFlashIt(){ const f=$("#qs-flash"); if(f){ f.classList.remove("go"); void f.offsetWidth; f.classList.add("go"); } try{ if(navigator.vibrate) navigator.vibrate(60); }catch(e){} }
 function qsAddShot(blob,page,batch){
   if(qs.closed) return;
@@ -3297,7 +3487,7 @@ function qsFlush(){
         const why=f.warn==="lineup"? (f.steep?"hold the phone flatter, straight over the page":"hold it flat and steady, whole page in view") : "keep the whole page in view";
         qs.again={page, at:Date.now(), msg:`${page} ${qsSecName(page)} didn't read: ${why}. Show it again`};
         try{ if(navigator.vibrate) navigator.vibrate([80,60,80]); }catch(e){}
-        qsMsg(qs.again.msg); qsProg(); return; } }
+        qsMsg(qs.again.msg); qsShowBad(page,`It didn't read: ${why}.`); qsProg(); return; } }
     (out.warns||[]).forEach(w=>qs.res.warns.add(w));
     const p=qsParse(out,cl,N); Object.assign(qs.res.items,p.items); Object.assign(qs.res.pos||(qs.res.pos={}),p.pos); if(p.warn) qs.res.warns.add(p.warn); if(p.sheet) qs.res.sheet=p.sheet; if(p.notes) qs.res.notes.push(p.notes);
     if(!Object.keys(p.items).length && !(out.warns||[]).length) qs.res.warns.add("A page couldn't be read. Its section stays “Not checked yet”.");
