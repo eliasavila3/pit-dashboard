@@ -3603,8 +3603,8 @@ function matchSheet(id){
       <label class="field"><span>Scheduled start</span><input type="datetime-local" id="mt-time" value="${d.time?toLocalInput(d.time):""}"></label></div>
       <div class="grid2"><div class="field"><span>Alliance</span>${seg("alliance",[["red","Red"],["blue","Blue"]],d.alliance,"alli")}</div>
       <div class="field"><span>Driver station</span>${seg("station",[["1","1"],["2","2"],["3","3"]],d.station)}</div></div>
-      <div class="grid2"><label class="field"><span>Partner 1</span><input type="text" inputmode="numeric" id="mt-p0" value="${esc(P[0]||"")}"></label><label class="field"><span>Partner 2</span><input type="text" inputmode="numeric" id="mt-p1" value="${esc(P[1]||"")}"></label></div>
-      <div class="grid2"><label class="field"><span>Opponent 1</span><input type="text" inputmode="numeric" id="mt-o0" value="${esc(O[0]||"")}"></label><label class="field"><span>Opponent 2</span><input type="text" inputmode="numeric" id="mt-o1" value="${esc(O[1]||"")}"></label><label class="field"><span>Opponent 3</span><input type="text" inputmode="numeric" id="mt-o2" value="${esc(O[2]||"")}"></label></div>
+      <div class="grid2"><label class="field"><span>Partner 1</span><input type="text" autocapitalize="characters" autocomplete="off" id="mt-p0" value="${esc(P[0]||"")}"></label><label class="field"><span>Partner 2</span><input type="text" autocapitalize="characters" autocomplete="off" id="mt-p1" value="${esc(P[1]||"")}"></label></div>
+      <div class="grid2"><label class="field"><span>Opponent 1</span><input type="text" autocapitalize="characters" autocomplete="off" id="mt-o0" value="${esc(O[0]||"")}"></label><label class="field"><span>Opponent 2</span><input type="text" autocapitalize="characters" autocomplete="off" id="mt-o1" value="${esc(O[1]||"")}"></label><label class="field"><span>Opponent 3</span><input type="text" autocapitalize="characters" autocomplete="off" id="mt-o2" value="${esc(O[2]||"")}"></label></div>
       <label class="field"><span>Battery used</span><input type="text" id="mt-bat" list="mt-bat-l" value="${esc((batOfMatch(d)||{}).label||d.battery||"")}" placeholder="Label on the battery, e.g. B7"><datalist id="mt-bat-l">${batsSorted().filter(x=>!x.retired).map(x=>`<option value="${esc(x.label)}">`).join("")}</datalist></label>
       <div class="field"><span>Result</span>${seg("result",[["","Not played"],["W","Win"],["L","Loss"],["T","Tie"]],d.result||"")}</div>
       <div class="grid2"><label class="field"><span>Our score</span><input type="number" id="mt-us" value="${esc(d.scoreUs??"")}"></label><label class="field"><span>Their score</span><input type="number" id="mt-them" value="${esc(d.scoreThem??"")}"></label><label class="field"><span>Ranking points</span><input type="number" id="mt-rp" value="${esc(d.rp??"")}"></label></div>
@@ -3634,7 +3634,7 @@ function parseSchedule(text,dateStr){
       let mm=t.match(/^(\d{1,2}):(\d{2})\s*(am|pm|a|p)?$/i);
       if(mm){ let h=Number(mm[1]); const ap=(mm[3]||(tk[i+1]&&/^(am|pm)$/i.test(tk[i+1])?tk[++i]:"")).toLowerCase(); if(ap.startsWith("p")&&h<12) h+=12; if(ap.startsWith("a")&&h===12) h=0; time=new Date(y,mo-1,da,h,Number(mm[2])).getTime(); continue; }
       mm=t.match(/^(red|blue|r|b)([1-3])?$/i); if(mm){ alliance=mm[1][0].toLowerCase()==="r"?"red":"blue"; station=mm[2]||""; continue; }
-      if(/^\d{1,5}$/.test(t)) teams.push(t);
+      if(/^\d{1,5}[A-Z]?$/i.test(t)) teams.push(t);   /* a team number, with a letter suffix if it has one (581B, 1678C), kept as typed */
     }
     out.push({type,num:Number(first[2]),time,alliance,station,partners:[teams[0]||"",teams[1]||""],opponents:[teams[2]||"",teams[3]||"",teams[4]||""]});
   });
